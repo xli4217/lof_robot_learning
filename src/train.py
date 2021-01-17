@@ -41,4 +41,4 @@ ppo(lambda: RobotEnv(headless=HEADLESS),
 )
 
 print('Done!')
-env.shutdown()
+

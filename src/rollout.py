@@ -59,4 +59,4 @@ def run_rollout(policy, env, num_episodes):
     env.shutdown()
 
 
-run_rollout(option, env, 2)
+run_rollout(option, env, 10)
