@@ -50,7 +50,6 @@ def run_rollout(policy, env, num_episodes):
         while not task_done:
             a = policy.get_action(torch.from_numpy(obs).float())
             obs, reward, task_done, _ = env.step(a)
-            print(task_done)
             R += reward
         
         time.sleep(1)

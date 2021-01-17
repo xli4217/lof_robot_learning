@@ -9,6 +9,10 @@ from spinup.algos.pytorch.ppo.ppo import ppo
 import torch
 import time
 from robot_env import RobotEnv
+import argparse
+
+
+HEADLESS = True
 
 logger_kwargs = {
     "output_dir": os.path.join(os.environ['PKG_PATH'], 'experiments', 'test'),
@@ -16,21 +20,23 @@ logger_kwargs = {
 }
 
 ac_kwargs = {
-    'hidden_sizes': (128, 128),
+    'hidden_sizes': (64, 64, 64),
     'activation': torch.nn.Tanh
 }
 
-ppo(RobotEnv,
+
+ppo(lambda: RobotEnv(headless=HEADLESS),
     logger_kwargs=logger_kwargs,
     ac_kwargs=ac_kwargs,
     clip_ratio=0.1,
     epochs=300,
     pi_lr=1e-4,
-    vf_lr=1e-3,
+    vf_lr=1e-4,
     lam=0.99,
-    steps_per_epoch=2000,
+    steps_per_epoch=3000,
     train_pi_iters=40,
     train_v_iters=40,
+    target_kl=0.01,
     max_ep_len=200
 )
 
