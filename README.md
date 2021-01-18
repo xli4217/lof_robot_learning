@@ -1,10 +1,10 @@
 # Installation And Setup
-1. Download CoppeliaSim_Edu_V4_1_0_Ubuntu18_04/ at https://www.coppeliarobotics.com/downloads# in the current directory
-2. `git pull --recursive https://github.com/xli4217/lof_robot_learning.git`
-3. conda env create -f env.yml
-4. source setup_path.sh
-5. Follow https://github.com/stepjam/PyRep to install PyRep (installed in libs/PyRep)
-6. sudo apt install xvfb (for training headless)
+1. sudo apt install xvfb (for training headless)
+2. `git clone --recurse-submodules https://github.com/xli4217/lof_robot_learning.git`
+3. Download CoppeliaSim_Edu_V4_1_0_Ubuntu18_04/ at https://www.coppeliarobotics.com/downloads# in the lof_robot_learning directory
+4. Follow https://github.com/stepjam/PyRep to install PyRep (installed in libs/PyRep)
+5. conda env create -f env.yml
+6. source setup_path.sh
 
 # Train And Run
 1. `conda activate lof`

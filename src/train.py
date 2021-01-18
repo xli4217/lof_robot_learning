@@ -12,7 +12,7 @@ from robot_env import RobotEnv
 import argparse
 
 
-HEADLESS = True
+HEADLESS = False
 
 logger_kwargs = {
     "output_dir": os.path.join(os.environ['PKG_PATH'], 'experiments', 'test'),
