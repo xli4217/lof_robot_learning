@@ -1,5 +1,7 @@
 CoppeliaSim*
 experiments/
+src/__pycache__/
+*.pyc
 *~
 *#
 #*
