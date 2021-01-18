@@ -1,0 +1,3 @@
+[submodule "libs/PyRep"]
+	path = libs/PyRep
+	url = https://github.com/stepjam/PyRep.git
