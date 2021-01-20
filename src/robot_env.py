@@ -38,16 +38,30 @@ class RobotEnv(gym.Env):
         self.agent_ee_tip = self.agent.get_tip()
         self.initial_joint_positions = self.agent.get_joint_positions()
 
-        self.action_space = gym.spaces.Box(low=np.array(7*[-1.]), high=np.array(7*[1.]), dtype=np.float32)
+        action_high = np.array(7 * [1.])
+        #action_high[1] = -10.
+        action_low = np.array(7 * [-1.])
+        #action_low[1] = -20
+
+        self.action_space = gym.spaces.Box(low=action_low, high=action_high, dtype=np.float32)
         self.observation_space = gym.spaces.Box(low=np.array(17*[-10.]), high=np.array(17*[10.]), dtype=np.float32)
         self.current_step = 0
         
     def _get_state(self):
-        # Return state containing arm joint angles/velocities & target position
+        # Return state containing arm joint angles/velocities & target position        
         return np.concatenate([self.agent.get_joint_positions(),
                                self.agent.get_joint_velocities(),
                                self.target.get_position()])
 
+        # jp = np.array(self.agent.get_joint_positions())
+        # jv = np.array(self.agent.get_joint_velocities())
+        # ee_p = np.array(self.agent_ee_tip.get_position())
+        # target_pos = np.array(self.target.get_position())
+
+        # state = np.concatenate([np.cos(jp), np.sin(jp), target_pos, jv, ee_p-target_pos])
+
+        return state
+        
     def reset(self):
         # Get a random position within a cuboid and set the target position
         self.t_start = time.time()
@@ -58,17 +72,27 @@ class RobotEnv(gym.Env):
         return self._get_state()
 
     def step(self, action):
+        #action *= 0.5
+        #action[1] *= -1
         self.agent.set_joint_target_velocities(action)  # Execute action on arm
         self.pr.step()  # Step the physics simulation
         ax, ay, az = self.agent_ee_tip.get_position()
         tx, ty, tz = self.target.get_position()
         # Reward is negative distance to target
-        reward = -np.sqrt((ax - tx) ** 2 + (ay - ty) ** 2 + (az - tz) ** 2)
-        
+        # print(ax, ay, az)
+        # print(tx, ty, tz)
+        # print("-----")
+        r_dist = -np.sqrt((ax - tx) ** 2 + (ay - ty) ** 2 + (az - tz) ** 2)
+        r_action = - np.linalg.norm(action)
+
+        # print(r_dist)
+        # print(r_action)
+        # print("---------")
+        reward = r_dist + 0.2*r_action
         done = False
         self.current_step += 1
         if self.current_step >= EPISODE_LENGTH:
-            # print(f"episode time: {time.time()-self.t_start}")
+            #print(f"episode time: {time.time()-self.t_start}")
             done = True
         info = {}
         
@@ -80,32 +104,36 @@ class RobotEnv(gym.Env):
 
 
 
+if __name__ == "__main__":
+        
+    class Agent(object):
+        
+        def act(self, state):
+            del state
+            return list(np.random.uniform(-1.0, 1.0, size=(7,)))
 
-# class Agent(object):
-
-#     def act(self, state):
-#         del state
-#         return list(np.random.uniform(-1.0, 1.0, size=(7,)))
-
-#     def learn(self, replay_buffer):
-#         del replay_buffer
-#         pass
+        def learn(self, replay_buffer):
+            del replay_buffer
+            pass
 
         
-# env = RobotEnv()
-# agent = Agent()
-# replay_buffer = []
+    env = RobotEnv(headless=False)
+    agent = Agent()
+    replay_buffer = []
 
-# for e in range(EPISODES):
+    EPISODES = 2
+    for e in range(EPISODES):
 
-#     print('Starting episode %d' % e)
-#     state = env.reset()
-#     for i in range(EPISODE_LENGTH):
-#         action = agent.act(state)
-#         reward, next_state, _, _ = env.step(action)
-#         replay_buffer.append((state, action, reward, next_state))
-#         state = next_state
-#         agent.learn(replay_buffer)
+        print('Starting episode %d' % e)
+        state = env.reset()
+        for i in range(EPISODE_LENGTH):
+            #action = agent.act(state)
+            action = np.array(7*[0])
+            action[1] = -1.
+            reward, next_state, _, _ = env.step(action)
+            replay_buffer.append((state, action, reward, next_state))
+            state = next_state
+            agent.learn(replay_buffer)
 
-#print('Done!')
-#env.shutdown()
+    print('Done!')
+    env.shutdown()

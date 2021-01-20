@@ -15,7 +15,9 @@ class Option(object):
         print(type(self.ac))
         
     def get_action(self, state: torch.Tensor):
-        return self.ac.act(state)
+        a = self.ac.pi.mu_net(state)
+        #a = self.ac.act(state)
+        return a.detach().numpy()
 
     def get_value(self, state: torch.Tensor):
         return self.ac.v(state)
@@ -30,7 +32,7 @@ class Option(object):
 ###############
 # Load Option #
 ###############
-option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'test', 'pyt_save', 'model.pt')
+option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo', 'pyt_save', 'model.pt')
 
 option = Option(option_load_path)
 
@@ -50,6 +52,7 @@ def run_rollout(policy, env, num_episodes):
         while not task_done:
             a = policy.get_action(torch.from_numpy(obs).float())
             obs, reward, task_done, _ = env.step(a)
+            task_done = False
             R += reward
         
         time.sleep(1)
