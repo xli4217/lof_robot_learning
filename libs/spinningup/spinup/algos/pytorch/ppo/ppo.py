@@ -7,6 +7,7 @@ import spinup.algos.pytorch.ppo.core as core
 from spinup.utils.logx import EpochLogger
 from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg_grads
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
+from torch.utils.tensorboard import SummaryWriter
 
 
 class PPOBuffer:
@@ -88,7 +89,7 @@ class PPOBuffer:
 def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
-        target_kl=0.01, logger_kwargs=dict(), save_freq=10):
+        target_kl=0.01, logger_kwargs=dict(), save_freq=10, minibatch_size=64):
     """
     Proximal Policy Optimization (by clipping), 
 
@@ -199,6 +200,28 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
 
+    # Set up tensorboard logger
+    tb_writer = SummaryWriter(log_dir=logger_kwargs['output_dir'], flush_secs=10)
+
+    # log hyperparameters
+    hparam_dict = {
+        'steps_per_epoch': steps_per_epoch,
+        'epochs': epochs,
+        'gamma': gamma,
+        'clip_ratio': clip_ratio,
+        'pi_lr': pi_lr,
+        'vf_lf': vf_lr,
+        'train_pi_iters': train_pi_iters,
+        'train_v_iters': train_v_iters,
+        'lam': lam,
+        'max_ep_len': max_ep_len,
+        'target_kl': target_kl,
+        'save_freq': save_freq,
+        'minibatch_size': minibatch_size
+    }
+
+    tb_writer.add_hparams(hparam_dict=hparam_dict, metric_dict={'metric': 0})
+    
     # Random seed
     seed += 10000 * proc_id()
     torch.manual_seed(seed)
@@ -231,15 +254,14 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         pi, logp = ac.pi(obs, act)
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
-        loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
+        ent = pi.entropy().mean()
+        loss_pi = -(torch.min(ratio * adv, clip_adv)).mean() - 0.05 * ent
 
         # Useful extra info
         approx_kl = (logp_old - logp).mean().item()
-        ent = pi.entropy().mean().item()
         clipped = ratio.gt(1+clip_ratio) | ratio.lt(1-clip_ratio)
         clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
-        pi_info = dict(kl=approx_kl, ent=ent, cf=clipfrac)
-
+        pi_info = dict(kl=approx_kl, ent=ent.item(), cf=clipfrac)
         return loss_pi, pi_info
 
     # Set up function for computing value loss
@@ -254,34 +276,45 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     # Set up model saving
     logger.setup_pytorch_saver(ac)
 
+    def get_minibatch_data(d, start_idx, end_idx):
+        minibatch_d = {}
+        for k, v in d.items():
+            minibatch_d[k] = v[start_idx:end_idx]
+        return minibatch_d
+            
     def update():
         data = buf.get()
-
         pi_l_old, pi_info_old = compute_loss_pi(data)
         pi_l_old = pi_l_old.item()
         v_l_old = compute_loss_v(data).item()
 
         # Train policy with multiple steps of gradient descent
         for i in range(train_pi_iters):
-            pi_optimizer.zero_grad()
-            loss_pi, pi_info = compute_loss_pi(data)
-            kl = mpi_avg(pi_info['kl'])
-            if kl > 1.5 * target_kl:
-                logger.log('Early stopping at step %d due to reaching max kl.'%i)
-                break
-            loss_pi.backward()
-            mpi_avg_grads(ac.pi)    # average grads across MPI processes
-            pi_optimizer.step()
+            for j in range(0,data['obs'].shape[0]-minibatch_size,minibatch_size):
+                minibatch_d = get_minibatch_data(data, j, j+minibatch_size)
+                pi_optimizer.zero_grad()
+                loss_pi, pi_info = compute_loss_pi(minibatch_d)
+                kl = mpi_avg(pi_info['kl'])
+                if kl > 1.5 * target_kl:
+                    logger.log('Early stopping at step %d due to reaching max kl.'%i)
+                    break
+                loss_pi.backward()
+                mpi_avg_grads(ac.pi)    # average grads across MPI processes
+                pi_optimizer.step()
 
         logger.store(StopIter=i)
-
+        stop_itr = i
+        
         # Value function learning
         for i in range(train_v_iters):
-            vf_optimizer.zero_grad()
-            loss_v = compute_loss_v(data)
-            loss_v.backward()
-            mpi_avg_grads(ac.v)    # average grads across MPI processes
-            vf_optimizer.step()
+            for j in range(0,data['obs'].shape[0]-minibatch_size,minibatch_size):
+                minibatch_d = get_minibatch_data(data, j, j+minibatch_size)
+           
+                vf_optimizer.zero_grad()
+                loss_v = compute_loss_v(minibatch_d)
+                loss_v.backward()
+                mpi_avg_grads(ac.v)    # average grads across MPI processes
+                vf_optimizer.step()
 
         # Log changes from update
         kl, ent, cf = pi_info['kl'], pi_info_old['ent'], pi_info['cf']
@@ -290,11 +323,14 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                      DeltaLossPi=(loss_pi.item() - pi_l_old),
                      DeltaLossV=(loss_v.item() - v_l_old))
 
+        return pi_l_old, v_l_old, kl, ent, cf, stop_itr, data, loss_pi.item() - pi_l_old, loss_v.item() - v_l_old
+        
     # Prepare for interaction with environment
     start_time = time.time()
     o, ep_ret, ep_len = env.reset(), 0, 0
-
+    
     # Main loop: collect experience in env and update/log each epoch
+    global_step = 0
     for epoch in range(epochs):
         for t in range(local_steps_per_epoch):
             a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
@@ -322,20 +358,45 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                     _, v, _ = ac.step(torch.as_tensor(o, dtype=torch.float32))
                 else:
                     v = 0
+
                 buf.finish_path(v)
                 if terminal:
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
+                EP_RET, EP_LEN = ep_ret, ep_len
                 o, ep_ret, ep_len = env.reset(), 0, 0
-
 
         # Save model
         if (epoch % save_freq == 0) or (epoch == epochs-1):
-            logger.save_state({'env': env}, None)
+            logger.save_state({'env': env}, itr=epoch)
 
         # Perform PPO update!
-        update()
+        pi_l_old, v_l_old, kl, ent, cf, stop_itr, buf_data, delta_loss_pi, delta_loss_v = update()
 
+        # tensorboard log
+        # scalars
+        tb_writer.add_scalar('train/ep_ret', EP_RET, global_step)
+        tb_writer.add_scalar('train/ep_len', EP_LEN, global_step)
+        tb_writer.add_scalar('train/value', v, global_step)
+        tb_writer.add_scalar('train/pi_loss', pi_l_old, global_step)
+        tb_writer.add_scalar('train/v_loss', v_l_old, global_step)
+        tb_writer.add_scalar('train/kl', kl, global_step)
+        tb_writer.add_scalar('train/entropy', ent, global_step)
+        tb_writer.add_scalar('train/clip_frac', cf, global_step)
+        tb_writer.add_scalar('train/stop_itr', stop_itr, global_step)
+        tb_writer.add_scalar('train/delta_loss_pi', delta_loss_pi, global_step)
+        tb_writer.add_scalar('train/delta_loss_v', delta_loss_v, global_step)
+        tb_writer.add_scalar('train/time', time.time()-start_time, global_step)        
+
+        # distributions
+        for k, v in buf_data.items():
+            if len(v.shape) == 1:
+                tb_writer.add_histogram(k, v, global_step)
+            else:
+                for i in range(v.shape[1]):
+                    tb_writer.add_histogram(k+"/"+str(i), v[:, i], global_step)
+        global_step += 1    
+        
         # Log info about epoch
         logger.log_tabular('Epoch', epoch)
         logger.log_tabular('EpRet', with_min_and_max=True)
