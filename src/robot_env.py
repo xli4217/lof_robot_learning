@@ -38,9 +38,9 @@ class RobotEnv(gym.Env):
         self.agent_ee_tip = self.agent.get_tip()
         self.initial_joint_positions = self.agent.get_joint_positions()
 
-        action_high = np.array(7 * [1.])
+        action_high = np.array(4 * [1.])
         #action_high[1] = -10.
-        action_low = np.array(7 * [-1.])
+        action_low = np.array(4 * [-1.])
         #action_low[1] = -20
 
         self.action_space = gym.spaces.Box(low=action_low, high=action_high, dtype=np.float32)
@@ -72,24 +72,23 @@ class RobotEnv(gym.Env):
         return self._get_state()
 
     def step(self, action):
-        #action *= 0.5
-        #action[1] *= -1
+        done = False
+        action = np.concatenate([action, np.zeros(3)])
         self.agent.set_joint_target_velocities(action)  # Execute action on arm
         self.pr.step()  # Step the physics simulation
         ax, ay, az = self.agent_ee_tip.get_position()
         tx, ty, tz = self.target.get_position()
+
         # Reward is negative distance to target
-        # print(ax, ay, az)
-        # print(tx, ty, tz)
-        # print("-----")
         r_dist = -np.sqrt((ax - tx) ** 2 + (ay - ty) ** 2 + (az - tz) ** 2)
         r_action = - np.linalg.norm(action)
+        
+        reward = r_dist #+ 0.1*r_action
+        reward *= 0.2
+        if r_dist > -0.05:
+            reward += 0.5
+            done = True
 
-        # print(r_dist)
-        # print(r_action)
-        # print("---------")
-        reward = r_dist + 0.2*r_action
-        done = False
         self.current_step += 1
         if self.current_step >= EPISODE_LENGTH:
             #print(f"episode time: {time.time()-self.t_start}")
