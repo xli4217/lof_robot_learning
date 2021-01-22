@@ -22,7 +22,7 @@ SCENE_FILE = join(dirname(abspath(__file__)), 'ttt',
                   'scene_reinforcement_learning_env.ttt')
 POS_MIN, POS_MAX = [0.8, -0.2, 1.0], [1.0, 0.2, 1.4]
 EPISODES = 5
-EPISODE_LENGTH = 200
+EPISODE_LENGTH = 100
 
 
 class RobotEnv(gym.Env):
@@ -44,13 +44,13 @@ class RobotEnv(gym.Env):
         #action_low[1] = -20
 
         self.action_space = gym.spaces.Box(low=action_low, high=action_high, dtype=np.float32)
-        self.observation_space = gym.spaces.Box(low=np.array(17*[-10.]), high=np.array(17*[10.]), dtype=np.float32)
+        self.observation_space = gym.spaces.Box(low=np.array(11*[-10.]), high=np.array(11*[10.]), dtype=np.float32)
         self.current_step = 0
         
     def _get_state(self):
         # Return state containing arm joint angles/velocities & target position        
-        return np.concatenate([self.agent.get_joint_positions(),
-                               self.agent.get_joint_velocities(),
+        return np.concatenate([self.agent.get_joint_positions()[:4],
+                               self.agent.get_joint_velocities()[:4],
                                self.target.get_position()])
 
         # jp = np.array(self.agent.get_joint_positions())
@@ -74,8 +74,9 @@ class RobotEnv(gym.Env):
     def step(self, action):
         done = False
         action = np.concatenate([action, np.zeros(3)])
-        self.agent.set_joint_target_velocities(action)  # Execute action on arm
-        self.pr.step()  # Step the physics simulation
+        for _ in range(1):
+            self.agent.set_joint_target_velocities(action)  # Execute action on arm
+            self.pr.step()  # Step the physics simulation
         ax, ay, az = self.agent_ee_tip.get_position()
         tx, ty, tz = self.target.get_position()
 
@@ -83,11 +84,11 @@ class RobotEnv(gym.Env):
         r_dist = -np.sqrt((ax - tx) ** 2 + (ay - ty) ** 2 + (az - tz) ** 2)
         r_action = - np.linalg.norm(action)
         
-        reward = r_dist #+ 0.1*r_action
-        reward *= 0.2
+        reward = r_dist #+ r_action
+        reward *= 0.5
         if r_dist > -0.05:
             reward += 0.5
-            done = True
+            #done = True
 
         self.current_step += 1
         if self.current_step >= EPISODE_LENGTH:

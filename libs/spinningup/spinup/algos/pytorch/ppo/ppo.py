@@ -89,7 +89,7 @@ class PPOBuffer:
 def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
-        target_kl=0.01, logger_kwargs=dict(), save_freq=10, minibatch_size=64):
+        target_kl=0.01, logger_kwargs=dict(), save_freq=10, minibatch_size=64, log_gradients=False):
     """
     Proximal Policy Optimization (by clipping), 
 
@@ -255,7 +255,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
         ent = pi.entropy().mean()
-        loss_pi = -(torch.min(ratio * adv, clip_adv)).mean() - 0.05 * ent
+        loss_pi = -(torch.min(ratio * adv, clip_adv)).mean() - 0.1 * ent
 
         # Useful extra info
         approx_kl = (logp_old - logp).mean().item()
@@ -302,6 +302,12 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 mpi_avg_grads(ac.pi)    # average grads across MPI processes
                 pi_optimizer.step()
 
+                if log_gradients:
+                    # log gradient
+                    for k, v in ac.pi.named_parameters():
+                        tb_writer.add_histogram('pi_grad/'+k, v.grad, global_step)
+
+                
         logger.store(StopIter=i)
         stop_itr = i
         
@@ -316,6 +322,12 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 mpi_avg_grads(ac.v)    # average grads across MPI processes
                 vf_optimizer.step()
 
+                if log_gradients:
+                    # log gradient
+                    for k, v in ac.v.named_parameters():
+                        tb_writer.add_histogram('v_grad/'+k, v.grad, global_step)
+
+                
         # Log changes from update
         kl, ent, cf = pi_info['kl'], pi_info_old['ent'], pi_info['cf']
         logger.store(LossPi=pi_l_old, LossV=v_l_old,
