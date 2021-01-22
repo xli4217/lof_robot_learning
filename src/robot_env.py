@@ -38,6 +38,8 @@ class RobotEnv(gym.Env):
         self.agent_ee_tip = self.agent.get_tip()
         self.initial_joint_positions = self.agent.get_joint_positions()
 
+        self.agent_config_tree = self.agent.get_configuration_tree()
+        
         action_high = np.array(4 * [1.])
         #action_high[1] = -10.
         action_low = np.array(4 * [-1.])
@@ -65,11 +67,18 @@ class RobotEnv(gym.Env):
     def reset(self):
         # Get a random position within a cuboid and set the target position
         self.t_start = time.time()
+        self.pr.set_configuration_tree(self.agent_config_tree)
         pos = list(np.random.uniform(POS_MIN, POS_MAX))
         self.target.set_position(pos)
         self.agent.set_joint_positions(self.initial_joint_positions)
         self.current_step = 0
-        return self._get_state()
+        obs = self._get_state()
+        # print(self.initial_joint_positions)
+        # print(self.agent.get_joint_positions())
+        # print(obs[:4])
+        # print(obs[-3:])
+        # print("---------")
+        return obs
 
     def step(self, action):
         done = False

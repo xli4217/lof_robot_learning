@@ -16,7 +16,8 @@ class Option(object):
         
     def get_action(self, state: torch.Tensor):
         #a = self.ac.pi.mu_net(state).detach().numpy()
-        a = self.ac.act(state)
+        #a = self.ac.act(state)
+        a,_,_ = self.ac.step(state)
         return a
 
     def get_value(self, state: torch.Tensor):
@@ -53,9 +54,7 @@ def run_rollout(policy, env, num_episodes):
             a = policy.get_action(torch.from_numpy(obs).float())
             obs, reward, task_done, _ = env.step(a)
             R += reward
-        
-        time.sleep(1)
-                
+            
         print(f"Episode {i} return: {R}")
 
     env.shutdown()
