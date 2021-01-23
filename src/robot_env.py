@@ -18,6 +18,11 @@ from spinup.algos.pytorch.ppo.ppo import ppo
 import torch
 import time
 
+from pyrep.const import RenderMode
+from pyrep.objects.dummy import Dummy
+from pyrep.objects.vision_sensor import VisionSensor
+
+
 SCENE_FILE = join(dirname(abspath(__file__)), 'ttt',
                   'scene_reinforcement_learning_env.ttt')
 POS_MIN, POS_MAX = [0.8, -0.2, 1.0], [1.0, 0.2, 1.4]
@@ -26,6 +31,8 @@ EPISODE_LENGTH = 100
 
 
 class RobotEnv(gym.Env):
+
+    metadata = {'render.modes': ['human', 'rgb_array']}
 
     def __init__(self, headless=True):
         self.pr = PyRep()
@@ -39,7 +46,8 @@ class RobotEnv(gym.Env):
         self.initial_joint_positions = self.agent.get_joint_positions()
 
         self.agent_config_tree = self.agent.get_configuration_tree()
-        
+
+        self._render_mode = 'human'
         action_high = np.array(4 * [1.])
         #action_high[1] = -10.
         action_low = np.array(4 * [-1.])
@@ -48,6 +56,14 @@ class RobotEnv(gym.Env):
         self.action_space = gym.spaces.Box(low=action_low, high=action_high, dtype=np.float32)
         self.observation_space = gym.spaces.Box(low=np.array(11*[-10.]), high=np.array(11*[10.]), dtype=np.float32)
         self.current_step = 0
+
+        cam_placeholder = Dummy('cam_cinematic_placeholder')
+        self._gym_cam = VisionSensor.create([640, 360])
+        self._gym_cam.set_pose(cam_placeholder.get_pose())
+        self._gym_cam.set_render_mode(RenderMode.OPENGL3_WINDOWED)
+
+    def render(self):
+        self._gym_cam.capture_rgb()
         
     def _get_state(self):
         # Return state containing arm joint angles/velocities & target position        
@@ -93,11 +109,11 @@ class RobotEnv(gym.Env):
         r_dist = -np.sqrt((ax - tx) ** 2 + (ay - ty) ** 2 + (az - tz) ** 2)
         r_action = - np.linalg.norm(action)
         
-        reward = r_dist #+ r_action
-        reward *= 0.5
+        reward = r_dist + r_action
+        reward *= 0.2
         if r_dist > -0.05:
             reward += 0.5
-            #done = True
+            # done = True
 
         self.current_step += 1
         if self.current_step >= EPISODE_LENGTH:
