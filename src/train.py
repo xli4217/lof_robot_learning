@@ -21,13 +21,14 @@ HEADLESS = True
 
 logger_kwargs = {
     "output_dir": os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo'),
-    "exp_name": "ppo"
+    "exp_name": "ppo",
 }
 
 ac_kwargs = {
     'hidden_sizes': (128, 128, 128),
-    'activation': torch.nn.Tanh
+    #'activation': torch.nn.Tanh
     #'activation': torch.nn.ReLU
+    'activation': torch.nn.LeakyReLU
 }
 
 # ddpg(lambda: RobotEnv(headless=HEADLESS),
@@ -52,17 +53,18 @@ ppo(env,
     logger_kwargs=logger_kwargs,
     ac_kwargs=ac_kwargs,
     clip_ratio=0.2,
-    epochs=300,
-    pi_lr=1e-4,
-    vf_lr=5e-4,
-    lam=0.97,
+    epochs=1200,
+    pi_lr=3e-4,
+    vf_lr=3e-4,
+    lam=0.99,
     gamma=0.995,
-    steps_per_epoch=3000,
-    train_pi_iters=5,
-    train_v_iters=10,
-    target_kl=0.05,
-    max_ep_len=200,
-    minibatch_size=64
+    steps_per_epoch=1000,
+    train_pi_iters=2,
+    train_v_iters=5,
+    target_kl=0.01,
+    max_ep_len=100,
+    minibatch_size=256,
+    log_gradients=False
 )
 
 print('Done!')

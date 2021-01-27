@@ -89,7 +89,7 @@ class PPOBuffer:
 def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
-        target_kl=0.01, logger_kwargs=dict(), save_freq=10, minibatch_size=64):
+        target_kl=0.01, logger_kwargs=dict(), save_freq=10, minibatch_size=64, log_gradients=False):
     """
     Proximal Policy Optimization (by clipping), 
 
@@ -200,11 +200,18 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
 
+    
+    # Random seed
+    seed += 10000 * proc_id()
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
     # Set up tensorboard logger
     tb_writer = SummaryWriter(log_dir=logger_kwargs['output_dir'], flush_secs=10)
 
     # log hyperparameters
     hparam_dict = {
+        'seed': seed,
         'steps_per_epoch': steps_per_epoch,
         'epochs': epochs,
         'gamma': gamma,
@@ -219,14 +226,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         'save_freq': save_freq,
         'minibatch_size': minibatch_size
     }
-
     tb_writer.add_hparams(hparam_dict=hparam_dict, metric_dict={'metric': 0})
     
-    # Random seed
-    seed += 10000 * proc_id()
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-
     # Instantiate environment
     env = env_fn()
     obs_dim = env.observation_space.shape
@@ -255,7 +256,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
         ent = pi.entropy().mean()
-        loss_pi = -(torch.min(ratio * adv, clip_adv)).mean() - 0.05 * ent
+        loss_pi = -(torch.min(ratio * adv, clip_adv)).mean() - 0.1 * ent
 
         # Useful extra info
         approx_kl = (logp_old - logp).mean().item()
@@ -302,6 +303,12 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 mpi_avg_grads(ac.pi)    # average grads across MPI processes
                 pi_optimizer.step()
 
+                if log_gradients:
+                    # log gradient
+                    for k, v in ac.pi.named_parameters():
+                        tb_writer.add_histogram('pi_grad/'+k, v.grad, global_step)
+
+                
         logger.store(StopIter=i)
         stop_itr = i
         
@@ -316,6 +323,12 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 mpi_avg_grads(ac.v)    # average grads across MPI processes
                 vf_optimizer.step()
 
+                if log_gradients:
+                    # log gradient
+                    for k, v in ac.v.named_parameters():
+                        tb_writer.add_histogram('v_grad/'+k, v.grad, global_step)
+
+                
         # Log changes from update
         kl, ent, cf = pi_info['kl'], pi_info_old['ent'], pi_info['cf']
         logger.store(LossPi=pi_l_old, LossV=v_l_old,
@@ -328,7 +341,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     # Prepare for interaction with environment
     start_time = time.time()
     o, ep_ret, ep_len = env.reset(), 0, 0
-    
+
+    EP_RET, EP_LEN = [], []
     # Main loop: collect experience in env and update/log each epoch
     global_step = 0
     for epoch in range(epochs):
@@ -363,7 +377,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
                 if terminal:
                     # only save EpRet / EpLen if trajectory finished
                     logger.store(EpRet=ep_ret, EpLen=ep_len)
-                EP_RET, EP_LEN = ep_ret, ep_len
+                EP_RET.append(ep_ret)
+                EP_LEN.append(ep_len)
                 o, ep_ret, ep_len = env.reset(), 0, 0
 
         # Save model
@@ -375,8 +390,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
 
         # tensorboard log
         # scalars
-        tb_writer.add_scalar('train/ep_ret', EP_RET, global_step)
-        tb_writer.add_scalar('train/ep_len', EP_LEN, global_step)
+        tb_writer.add_scalar('train/ep_ret', np.array(EP_RET).mean(), global_step)
+        tb_writer.add_scalar('train/ep_len', np.array(EP_LEN).mean(), global_step)
         tb_writer.add_scalar('train/value', v, global_step)
         tb_writer.add_scalar('train/pi_loss', pi_l_old, global_step)
         tb_writer.add_scalar('train/v_loss', v_l_old, global_step)
