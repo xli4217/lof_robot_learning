@@ -53,7 +53,7 @@ ppo(env,
     logger_kwargs=logger_kwargs,
     ac_kwargs=ac_kwargs,
     clip_ratio=0.2,
-    epochs=1200,
+    epochs=30000,
     pi_lr=3e-4,
     vf_lr=3e-4,
     lam=0.99,
@@ -61,10 +61,11 @@ ppo(env,
     steps_per_epoch=1000,
     train_pi_iters=2,
     train_v_iters=5,
-    target_kl=0.01,
+    target_kl=0.02,
     max_ep_len=100,
     minibatch_size=256,
-    log_gradients=False
+    log_gradients=False,
+    save_freq=500
 )
 
 print('Done!')
