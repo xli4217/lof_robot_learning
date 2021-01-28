@@ -29,19 +29,19 @@ class Option(object):
     def environment_info(self):
         pass
 
-
+        
 ###############
 # Load Option #
 ###############
 
-option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo', 'pyt_save', 'model2999.pt')
+option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo_action_penalty_inverse_reward_3000', 'pyt_save', 'model2999.pt')
 option = Option(option_load_path)
 
 #################
 # Construct Env #
 #################
-env = RobotEnv(headless=True)
-render_gl = True
+render_camera = False
+env = RobotEnv(headless=True, render_camera=render_camera)
 
 ###############
 # Run Rollout #
@@ -55,7 +55,7 @@ def run_rollout(policy, env, num_episodes):
             a = policy.get_action(torch.from_numpy(obs).float())
             obs, reward, task_done, _ = env.step(a)
             R += reward
-            if render_gl:
+            if render_camera:
                 env.render()
         print(f"Episode {i} return: {R}")
 
