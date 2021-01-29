@@ -34,7 +34,7 @@ class Option(object):
 # Load Option #
 ###############
 
-option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo_action_penalty_inverse_reward_3000', 'pyt_save', 'model2999.pt')
+option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo', 'pyt_save', 'model1500.pt')
 option = Option(option_load_path)
 
 #################

@@ -17,6 +17,7 @@ import gym
 from spinup.algos.pytorch.ppo.ppo import ppo
 import torch
 import time
+import pdb
 
 from pyrep.const import RenderMode
 from pyrep.objects.dummy import Dummy
@@ -137,6 +138,22 @@ class RobotEnv(gym.Env):
         # state = np.concatenate([np.cos(jp), np.sin(jp), target_pos, jv, ee_p-target_pos])
 
         return state
+
+    # this is for when you're running multiple options in a row
+    # and you don't want to reset the environment, just reset
+    # a few parameters before the option runs
+    def soft_reset(self):
+        # reset gripper
+        self.gripper.release()
+        while not self.gripper.actuate(amount=1., velocity=0.01):
+            self.pr.step()
+        
+        self.current_step = 0
+
+        self.update_all_info()
+        obs = self._get_state()
+        return obs
+
         
     def reset(self):
         # Get a random position within a cuboid and set the target position
@@ -154,7 +171,17 @@ class RobotEnv(gym.Env):
 
         if self.option_rollout:
             for target in ['red_target', 'green_target', 'blue_target']:
-                p = list(np.random.uniform(POS_MIN, POS_MAX))
+                # p = list(np.random.uniform(POS_MIN, POS_MAX))
+                if target == 'red_target':
+                    #    y  x    z
+                    p = [1, 0, 1.1]
+                    # p = [0.995571017403438, -0.26717585812859207, 1.22541053485359]
+                elif target == 'blue_target':
+                    # p = [0.9253633645046548, -0.2429622263626289, 1.2934958440409452]
+                    p = [1, -0.35, 1.1]
+                    # p = [1.028885866489908, -0.14226173186552954, 1.1467473336227838]
+                elif target == 'green_target':
+                    p = [1, 0.35, 1.1]
                 self.all_info[target]['obj'].set_position(p)
         
         self.agent.set_joint_positions(self.initial_joint_positions)
@@ -195,7 +222,7 @@ class RobotEnv(gym.Env):
                         self.pr.step()
                     info['grasped'] = True
                     done = True
-                    print("Graspped")
+                    print("Grasped")
                 else:
                     info['grasped'] = False
             elif action[0] == 1 and np.linalg.norm(np.array(self.agent_ee_tip.get_position()) - np.array(self.all_info[obj_name]['pos'])) < 0.05: # open
