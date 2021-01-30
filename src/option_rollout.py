@@ -51,14 +51,16 @@ class Option(object):
 # Load Option #
 ###############
 option_load_path = os.path.join(os.environ['PKG_PATH'], 'src', 'model3500.pt' )
-pick_option = Option(option_load_path, pick_or_place='pick', target='red_target')
-place_option = Option(option_load_path, pick_or_place='place', target='red_goal')
+pick_red_option = Option(option_load_path, pick_or_place='pick', target='red_target')
+place_red_option = Option(option_load_path, pick_or_place='place', target='red_goal')
+pick_green_option = Option(option_load_path, pick_or_place='pick', target='green_target')
+place_green_option = Option(option_load_path, pick_or_place='place', target='green_goal')
 
 #################
 # Construct Env #
 #################
 render_camera = False
-env = RobotEnv(headless=False, render_camera=render_camera, option_rollout=True)
+env = RobotEnv(headless=False, render_camera=render_camera, option_rollout=True, episode_len=200)
 
 ###############
 # Run Rollout #
@@ -66,24 +68,34 @@ env = RobotEnv(headless=False, render_camera=render_camera, option_rollout=True)
 def run_rollout(options, env, num_episodes):
     for i in range(num_episodes):
         done = False
+        task_done = False
         R = 0
         env.reset()
-        for option, i in zip(options, range(len(options))):
-            # print(f"using option {i}")
+        for option_name, option in options.items():
+            print(f"using option {option_name}")
             done = False
-            while not done:
+            while not done and not task_done:
                 a = option.get_action(env.all_info)            
                 _, _, done, info = env.step(a, option.get_target_name())
                 if render_camera:
                     env.render()
-                if done:
+                task_done = info['task_done']
+                if done or task_done:
+                    env.current_step = 0
+                    done = False
+                    task_done = False
                     break
-
     env.shutdown()
 
 
 #### Test pick and place option ####
-run_rollout([pick_option, place_option], env, 10)
+options_dict = {
+    'pick_red': pick_red_option,
+    'place_red': place_red_option,
+    'pick_green': pick_green_option,
+    'place_green': place_green_option
+}
+run_rollout(options_dict, env, 10)
 
 #### Test place option ####
 #run_rollout(place_option, env, 10)

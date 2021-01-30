@@ -30,15 +30,13 @@ SCENE_FILE = join(dirname(abspath(__file__)), 'ttt',
 sample_region_dim = np.array([0.3, 0.7, 0.4])
 sample_region_pos = np.array([0.892,0, 0.961])
 POS_MIN, POS_MAX = list(sample_region_pos - sample_region_dim/2), list(sample_region_pos + sample_region_dim/2) 
-EPISODES = 5
-EPISODE_LENGTH = 100
 
 
 class RobotEnv(gym.Env):
 
     metadata = {'render.modes': ['human', 'rgb_array']}
 
-    def __init__(self, headless=True, render_camera=False, option_rollout=False):
+    def __init__(self, headless=True, render_camera=False, option_rollout=False, episode_len=100):
         self.pr = PyRep()
         self.pr.launch(SCENE_FILE, headless=headless)
         self.pr.start()
@@ -50,6 +48,7 @@ class RobotEnv(gym.Env):
         self.initial_joint_positions = self.agent.get_joint_positions()
         #self.gripper_sensor = ProximitySensor('Panda_gripper_grasp_sensor')
         self.option_rollout = option_rollout
+        self.episode_len = episode_len
         
         self.gripper = PandaGripper()
         self.gripper_dummy = Dummy('Panda_tip')
@@ -166,6 +165,7 @@ class RobotEnv(gym.Env):
 
     def step(self, action, obj_name=None):
         done = False
+        task_done = False
         info = {
             'grasped': False,
             'released': False
@@ -190,11 +190,13 @@ class RobotEnv(gym.Env):
         # gripper control
         if self.option_rollout:
             if action[0] == 0: # close
+                #print(obj_name)
+                #print(self.gripper.grasp(self.all_info[obj_name]['obj']))
                 if self.gripper.grasp(self.all_info[obj_name]['obj']):
                     while not self.gripper.actuate(amount=0.5, velocity=0.01):
                         self.pr.step()
                     info['grasped'] = True
-                    done = True
+                    task_done = True
                     print("Graspped")
                 else:
                     info['grasped'] = False
@@ -203,9 +205,8 @@ class RobotEnv(gym.Env):
                 while not self.gripper.actuate(amount=1., velocity=0.01):
                     self.pr.step()
                 info['released'] = True
-                done = True
+                task_done = True
                 print("Released")
-                
         r_action = - np.linalg.norm(action)
         
         if dist > 0.2:
@@ -220,10 +221,12 @@ class RobotEnv(gym.Env):
             # done = True
 
         self.current_step += 1
-        if self.current_step >= EPISODE_LENGTH:
+        if self.current_step >= self.episode_len:
             #print(f"episode time: {time.time()-self.t_start}")
             done = True
-        
+
+        info['task_done'] = task_done
+
         return self._get_state(), reward, done, info
 
     def gripper_actuate(self, amount, velocity):
