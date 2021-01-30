@@ -63,24 +63,27 @@ env = RobotEnv(headless=False, render_camera=render_camera, option_rollout=True)
 ###############
 # Run Rollout #
 ###############
-def run_rollout(option, env, num_episodes):
+def run_rollout(options, env, num_episodes):
     for i in range(num_episodes):
-        task_done = False
+        done = False
         R = 0
         env.reset()
-        for _ in range(200):
-            a = option.get_action(env.all_info)            
-            _, _, task_done, info = env.step(a, option.get_target_name())
-            if render_camera:
-                env.render()
-            if task_done:
-                break
+        for option, i in zip(options, range(len(options))):
+            # print(f"using option {i}")
+            done = False
+            while not done:
+                a = option.get_action(env.all_info)            
+                _, _, done, info = env.step(a, option.get_target_name())
+                if render_camera:
+                    env.render()
+                if done:
+                    break
 
     env.shutdown()
 
 
-#### Test pick option ####
-run_rollout(pick_option, env, 10)
+#### Test pick and place option ####
+run_rollout([pick_option, place_option], env, 10)
 
 #### Test place option ####
 #run_rollout(place_option, env, 10)
