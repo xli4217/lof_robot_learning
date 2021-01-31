@@ -90,10 +90,10 @@ def run_rollout(options, env, num_episodes):
 
 #### Test pick and place option ####
 options_dict = {
-    'pick_red': pick_red_option,
-    'place_red': place_red_option,
-    'pick_green': pick_green_option,
-    'place_green': place_green_option
+    'pick_red1': pick_red_option,
+    'place_red2': place_red_option,
+    'pick_green3': pick_green_option,
+    'place_red4': place_red_option
 }
 run_rollout(options_dict, env, 10)
 

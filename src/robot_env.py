@@ -255,14 +255,33 @@ if __name__ == "__main__":
     agent = Agent()
     replay_buffer = []
 
-    for _ in range(500):
-        # env.gripper.grasp(env.target)
-        while not env.gripper.actuate(amount=0.5, velocity=0.01):
-           env.pr.step()
-        #env.gripper.actuate(amount=0.5, velocity=0.01)
-        action = np.array(4*[0])
-        #action[0] = 1.
-        reward, next_state, _, _ = env.step(action)
+    #env.agent.set_ik_group_properties(resolution_method='damped_least_squares', dls_damping=0.1)
+    #env.agent.set_ik_element_properties(constraint_alpha_beta=False, constraint_gamma=False)
+
+    env.agent.set_joint_positions(env.agent.get_joint_positions())
+    print(env.agent.get_joint_positions())
+    p1 = env.target.get_position()
+    q1 = env.target.get_quaternion()
+    o1 = env.target.get_orientation()
+    #env.agent.get_configs_for_tip_pose(position=p1, quaternion=o1, relative_to=env.agent)
+
+    import math
+    path = env.agent.get_path(position=[0.98,0.14,1.19], euler=[0, math.radians(180), 0])
+    print(path)
+    
+    # p = env.target.get_position(env.agent_ee_tip)
+    # o = env.target.get_quaternion(env.agent_ee_tip)
+    # print(p, o)
+    # print(env.agent.get_configs_for_tip_pose(position=p, quaternion=o, relative_to=env.agent_ee_tip))
+    
+    # for _ in range(500):
+    #     # env.gripper.grasp(env.target)
+    #     while not env.gripper.actuate(amount=0.5, velocity=0.01):
+    #        env.pr.step()
+    #     #env.gripper.actuate(amount=0.5, velocity=0.01)
+    #     action = np.array(4*[0])
+    #     #action[0] = 1.
+    #     reward, next_state, _, _ = env.step(action)
    
     
     # EPISODES = 2
