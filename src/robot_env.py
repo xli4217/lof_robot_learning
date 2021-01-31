@@ -8,6 +8,18 @@ This script contains examples of:
     - Setting joint properties (control loop disabled, motor locked at 0 vel)
 """
 import os
+
+# cwd = os.getcwd()
+# coppeliasim_root = cwd  + '/CoppeliaSim_Edu_V4_1_0_Ubuntu18_04'
+# os.environ['LD_LIBRARY_PATH'] = coppeliasim_root + ':' + os.environ['LD_LIBRARY_PATH']
+# os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = coppeliasim_root
+
+# spinningup_root = cwd + '/libs/spinningup'
+# rlbench_root = cwd + '/libs/RLBench'
+# os.environ['PYTHONPATH'] = spinningup_root + ":" + os.environ['PYTHONPATH']
+# os.environ['PYTHONPATH'] = rlbench_root + ":" + os.environ['PYTHONPATH']
+# os.environ['PKG_PATH'] = cwd
+
 from os.path import dirname, join, abspath
 from pyrep import PyRep
 from pyrep.robots.arms.panda import Panda
@@ -25,25 +37,26 @@ from pyrep.objects.vision_sensor import VisionSensor
 from pyrep.objects.proximity_sensor import ProximitySensor
 from pyrep.robots.end_effectors.panda_gripper import PandaGripper
 
+from option import Subgoal
+
 SCENE_FILE = join(dirname(abspath(__file__)), 'ttt',
                   'scene_reinforcement_learning_env.ttt')
 #POS_MIN, POS_MAX = [0.8, -0.2, 1.0], [1.0, 0.2, 1.4]
 sample_region_dim = np.array([0.3, 0.7, 0.4])
 sample_region_pos = np.array([0.892,0, 0.961])
 POS_MIN, POS_MAX = list(sample_region_pos - sample_region_dim/2), list(sample_region_pos + sample_region_dim/2) 
-EPISODES = 5
-EPISODE_LENGTH = 100
 
 
 class RobotEnv(gym.Env):
 
     metadata = {'render.modes': ['human', 'rgb_array']}
 
-    def __init__(self, headless=True, render_camera=False, option_rollout=False):
+    def __init__(self, headless=True, render_camera=False, option_rollout=False, episode_len=100):
         self.pr = PyRep()
         self.pr.launch(SCENE_FILE, headless=headless)
         self.pr.start()
         self.agent = Panda()
+        
         self.agent.set_control_loop_enabled(False)
         self.agent.set_motor_locked_at_zero_velocity(True)
         self.target = Shape('target')
@@ -51,6 +64,7 @@ class RobotEnv(gym.Env):
         self.initial_joint_positions = self.agent.get_joint_positions()
         #self.gripper_sensor = ProximitySensor('Panda_gripper_grasp_sensor')
         self.option_rollout = option_rollout
+        self.episode_len = episode_len
         
         self.gripper = PandaGripper()
         self.gripper_dummy = Dummy('Panda_tip')
@@ -88,6 +102,21 @@ class RobotEnv(gym.Env):
         self.blue_target = Shape('blue_target')
         
         self.update_all_info()
+
+        self.subgoals = self.make_subgoals()
+
+    def make_subgoals(self):
+        # name, prop_index, subgoal_index, state
+        all_info = self.all_info
+        red_target = Subgoal('red_target', 0, 0, all_info['red_target']['pos'])
+        red_goal = Subgoal('red_goal', 1, 1, all_info['red_goal']['pos'])
+        green_target = Subgoal('green_target', 2, 2, all_info['green_target']['pos'])
+        green_goal = Subgoal('green_goal', 3, 3, all_info['green_goal']['pos'])
+        blue_target = Subgoal('blue_target', 4, 4, all_info['blue_target']['pos'])
+        blue_goal = Subgoal('blue_goal', 5, 5, all_info['blue_goal']['pos'])
+
+        return [red_target, red_goal, green_target, green_goal, blue_target, blue_goal]
+
         
     def render(self):
         if self.render_camera:
@@ -143,16 +172,19 @@ class RobotEnv(gym.Env):
     # and you don't want to reset the environment, just reset
     # a few parameters before the option runs
     def soft_reset(self):
-        # reset gripper
-        self.gripper.release()
-        while not self.gripper.actuate(amount=1., velocity=0.01):
-            self.pr.step()
+        # # Get a random position within a cuboid and set the target position
+        # self.t_start = time.time()
+        
+        # # reset gripper
+        # self.gripper.release()
+        # while not self.gripper.actuate(amount=1., velocity=0.01):
+        #     self.pr.step()
         
         self.current_step = 0
 
-        self.update_all_info()
-        obs = self._get_state()
-        return obs
+        # self.update_all_info()
+        # obs = self._get_state()
+        # return obs
 
         
     def reset(self):
@@ -174,11 +206,11 @@ class RobotEnv(gym.Env):
                 # p = list(np.random.uniform(POS_MIN, POS_MAX))
                 if target == 'red_target':
                     #    y  x    z
-                    p = [1, 0, 1.1]
+                    p = [0.95, 0, 1.1]
                     # p = [0.995571017403438, -0.26717585812859207, 1.22541053485359]
                 elif target == 'blue_target':
                     # p = [0.9253633645046548, -0.2429622263626289, 1.2934958440409452]
-                    p = [1, -0.35, 1.1]
+                    p = [1, -0.15, 1.1]
                     # p = [1.028885866489908, -0.14226173186552954, 1.1467473336227838]
                 elif target == 'green_target':
                     p = [1, 0.35, 1.1]
@@ -193,6 +225,7 @@ class RobotEnv(gym.Env):
 
     def step(self, action, obj_name=None):
         done = False
+        task_done = False
         info = {
             'grasped': False,
             'released': False
@@ -217,6 +250,8 @@ class RobotEnv(gym.Env):
         # gripper control
         if self.option_rollout:
             if action[0] == 0: # close
+                #print(obj_name)
+                #print(self.gripper.grasp(self.all_info[obj_name]['obj']))
                 if self.gripper.grasp(self.all_info[obj_name]['obj']):
                     while not self.gripper.actuate(amount=0.5, velocity=0.01):
                         self.pr.step()
@@ -230,9 +265,8 @@ class RobotEnv(gym.Env):
                 while not self.gripper.actuate(amount=1., velocity=0.01):
                     self.pr.step()
                 info['released'] = True
-                done = True
+                task_done = True
                 print("Released")
-                
         r_action = - np.linalg.norm(action)
         
         if dist > 0.2:
@@ -247,10 +281,12 @@ class RobotEnv(gym.Env):
             # done = True
 
         self.current_step += 1
-        if self.current_step >= EPISODE_LENGTH:
+        if self.current_step >= self.episode_len:
             #print(f"episode time: {time.time()-self.t_start}")
             done = True
-        
+
+        info['task_done'] = task_done
+
         return self._get_state(), reward, done, info
 
     def gripper_actuate(self, amount, velocity):
