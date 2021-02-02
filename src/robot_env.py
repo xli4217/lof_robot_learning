@@ -43,7 +43,7 @@ class RobotEnv(gym.Env):
         self.agent = Panda()
         self.agent.set_control_loop_enabled(False)
         self.agent.set_motor_locked_at_zero_velocity(True)
-        self.target = Shape('target')
+        # self.target = Shape('target')
         self.agent_ee_tip = self.agent.get_tip()
         self.initial_joint_positions = self.agent.get_joint_positions()
         #self.gripper_sensor = ProximitySensor('Panda_gripper_grasp_sensor')
@@ -84,6 +84,8 @@ class RobotEnv(gym.Env):
         self.red_target = Shape('red_target')
         self.green_target = Shape('green_target')
         self.blue_target = Shape('blue_target')
+
+        self.target = self.red_target
         
         self.update_all_info()
         
@@ -240,34 +242,39 @@ class RobotEnv(gym.Env):
 
 if __name__ == "__main__":
         
-    class Agent(object):
+    # class Agent(object):
         
-        def act(self, state):
-            del state
-            return list(np.random.uniform(-1.0, 1.0, size=(7,)))
+    #     def act(self, state):
+    #         del state
+    #         return list(np.random.uniform(-1.0, 1.0, size=(7,)))
 
-        def learn(self, replay_buffer):
-            del replay_buffer
-            pass
+    #     def learn(self, replay_buffer):
+    #         del replay_buffer
+    #         pass
 
         
-    env = RobotEnv(headless=True, render_camera=False)
-    agent = Agent()
-    replay_buffer = []
+    env = RobotEnv(headless=True, render_camera=True)
+    env.reset()
+    for _ in range(100):
+        time.sleep(10)
+        env.render()
+    
+    # agent = Agent()
+    # replay_buffer = []
 
-    #env.agent.set_ik_group_properties(resolution_method='damped_least_squares', dls_damping=0.1)
-    #env.agent.set_ik_element_properties(constraint_alpha_beta=False, constraint_gamma=False)
 
-    env.agent.set_joint_positions(env.agent.get_joint_positions())
-    print(env.agent.get_joint_positions())
-    p1 = env.target.get_position()
-    q1 = env.target.get_quaternion()
-    o1 = env.target.get_orientation()
-    #env.agent.get_configs_for_tip_pose(position=p1, quaternion=o1, relative_to=env.agent)
+    # p1 = np.array([1.06900001, 0.01499999, 1.31599903])
+    # p2 = np.array([1.1, 0.1, 1.2])
 
-    import math
-    path = env.agent.get_path(position=[0.98,0.14,1.19], euler=[0, math.radians(180), 0])
-    print(path)
+    # import math
+    # ik1 = env.agent.solve_ik(position=p1, euler=[0, math.radians(180), 0])
+    # ik2 = env.agent.solve_ik(position=p2, euler=[0, math.radians(180), 0])
+    # print(f"ik1: {ik1}")
+    # print(f"ik2: {ik2}")
+    
+    # import math
+    # path = env.agent.get_path(position=[0.98,0.14,1.19], euler=[0, math.radians(180), 0])
+    # print(path)
     
     # p = env.target.get_position(env.agent_ee_tip)
     # o = env.target.get_quaternion(env.agent_ee_tip)
