@@ -52,16 +52,11 @@ class Option(object):
 ###############
 # Load Option #
 ###############
-option_load_path = os.path.join(os.environ['PKG_PATH'], 'src', 'model3500.pt' )
-# red_pick_option = Option(option_load_path, pick_or_place='pick', target='red_target')
-# blue_pick_option = Option(option_load_path, pick_or_place='pick', target='blue_target')
-# green_pick_option = Option(option_load_path, pick_or_place='pick', target='green_target')
-# place_option = Option(option_load_path, pick_or_place='place', target='red_goal')
+option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo', 'pyt_save', 'model7000.pt' )
 
 pick_red_option = Option(option_load_path, pick_or_place='pick', target='red_target')
 place_red_option = Option(option_load_path, pick_or_place='place', target='red_goal')
 pick_green_option = Option(option_load_path, pick_or_place='pick', target='green_target')
-place_green_option = Option(option_load_path, pick_or_place='place', target='green_goal')
 pick_blue_option = Option(option_load_path, pick_or_place='pick', target='blue_target')
 
 #################
@@ -98,78 +93,13 @@ def run_rollout(options, env, num_episodes):
                     break
     env.shutdown()
 
-###############
-# Run Rollout #
-###############
-def run_pick_and_place(rpo, bpo, gpo, place_option, env, num_episodes):
-    for i in range(num_episodes):
-        pick_done = False
-        env.reset()
-        for _ in range(1000):
-            a = rpo.get_action(env.all_info)            
-            _, _, pick_done, info = env.step(a, rpo.get_target_name())
-            if render_camera:
-                env.render()
-            if pick_done:
-                break
-        place_done = False
-        env.soft_reset()
-        for _ in range(1000):
-            a = place_option.get_action(env.all_info)            
-            _, _, place_done, info = env.step(a, place_option.get_target_name())
-            if render_camera:
-                env.render()
-            if place_done:
-                break
-
-        pick_done = False
-        env.soft_reset()
-        for _ in range(1000):
-            a = bpo.get_action(env.all_info)            
-            _, _, pick_done, info = env.step(a, bpo.get_target_name())
-            if render_camera:
-                env.render()
-            if pick_done:
-                break
-        place_done = False
-        env.soft_reset()
-        for _ in range(1000):
-            a = place_option.get_action(env.all_info)            
-            _, _, place_done, info = env.step(a, place_option.get_target_name())
-            if render_camera:
-                env.render()
-            if place_done:
-                break
-
-        pick_done = False
-        env.soft_reset()
-        for _ in range(1000):
-            a = gpo.get_action(env.all_info)            
-            _, _, pick_done, info = env.step(a, gpo.get_target_name())
-            if render_camera:
-                env.render()
-            if pick_done:
-                break
-        place_done = False
-        env.soft_reset()
-        for _ in range(1000):
-            a = place_option.get_action(env.all_info)            
-            _, _, place_done, info = env.step(a, place_option.get_target_name())
-            if render_camera:
-                env.render()
-            if place_done:
-                break
-
-    env.shutdown()
-
-
 #### Test pick option ####
 # run_pick_and_place(red_pick_option, blue_pick_option, green_pick_option, place_option, env, 2)
 
 #### Test pick and place option ####
 options_dict = {
     'pick_green': pick_green_option,
-    'place_red': place_red_option,
+    'place_red1': place_red_option,
     'pick_blue': pick_blue_option,
     'place_red2': place_red_option,
     'pick_red': pick_red_option,

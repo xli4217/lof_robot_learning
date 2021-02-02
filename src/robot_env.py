@@ -57,6 +57,10 @@ class RobotEnv(gym.Env):
         self.pr.start()
         self.agent = Panda()
         
+        # so that you don't have to do forward kinematics over and over again,
+        # store a dictionary
+        self.fk_dict = {}
+
         self.agent.set_control_loop_enabled(False)
         self.agent.set_motor_locked_at_zero_velocity(True)
         self.target = Shape('target')
@@ -95,8 +99,8 @@ class RobotEnv(gym.Env):
 
         
         self.red_goal = Shape('red_goal')
-        self.green_goal = Shape('green_goal')
-        self.blue_goal = Shape('blue_goal')
+        # self.green_goal = Shape('green_goal')
+        # self.blue_goal = Shape('blue_goal')
         self.red_target = Shape('red_target')
         self.green_target = Shape('green_target')
         self.blue_target = Shape('blue_target')
@@ -108,14 +112,29 @@ class RobotEnv(gym.Env):
     def make_subgoals(self):
         # name, prop_index, subgoal_index, state
         all_info = self.all_info
-        red_target = Subgoal('red_target', 0, 0, all_info['red_target']['pos'])
-        red_goal = Subgoal('red_goal', 1, 1, all_info['red_goal']['pos'])
-        green_target = Subgoal('green_target', 2, 2, all_info['green_target']['pos'])
-        green_goal = Subgoal('green_goal', 3, 3, all_info['green_goal']['pos'])
-        blue_target = Subgoal('blue_target', 4, 4, all_info['blue_target']['pos'])
-        blue_goal = Subgoal('blue_goal', 5, 5, all_info['blue_goal']['pos'])
+        states = {
+                'green_target': [0.24034619331359863, 0.44248393177986145, 0.43842342495918274, -1.5559585094451904, 0.0022624782286584377, 1.2168419361114502, 0.7836881875991821],
+                # 'green_goal': [-0.020605087280273438, 0.2608805000782013, -0.024641960859298706, -1.7960588932037354, 0.0022796443663537502, 1.2168171405792236, 0.7836595773696899],
+                'blue_target': [-0.10592365264892578, 0.2675664722919464, -0.23654529452323914, -1.800999402999878, 0.002284651156514883, 1.2168364524841309, 0.7836672067642212],
+                # 'blue_goal': [0.3583078384399414, 0.2378089725971222, 0.31930235028266907, -1.9656519889831543, 0.002270584460347891, 1.2168819904327393, 0.7836657762527466],
+                'red_target': [0.08351826667785645, 0.16150668263435364, -0.11060187220573425, -1.972297191619873, 0.0022682002745568752, 1.2168371677398682, 0.7836600542068481],
+                'red_goal': [-0.08144235610961914, 0.3910515606403351, -0.6666841506958008, -1.668611764907837, 0.0023123077116906643, 1.216784954071045, 0.783650279045105]
+            }
+        red_target = Subgoal('red_target', 0, 0, all_info['red_target']['pos'], states['red_target'])
+        red_goal = Subgoal('red_goal', 1, 1, all_info['red_goal']['pos'], states['red_goal'])
+        green_target = Subgoal('green_target', 2, 2, all_info['green_target']['pos'], states['green_target'])
+        # green_goal = Subgoal('green_goal', 3, 3, all_info['green_goal']['pos'], states['green_goal'])
+        blue_target = Subgoal('blue_target', 4, 4, all_info['blue_target']['pos'], states['blue_target'])
+        # blue_goal = Subgoal('blue_goal', 5, 5, all_info['blue_goal']['pos'], states['blue_goal'])
+        
+        # red_target = Subgoal('red_target', 0, 0, all_info['red_target'])
+        # red_goal = Subgoal('red_goal', 1, 1, all_info['red_goal'])
+        # green_target = Subgoal('green_target', 2, 2, all_info['green_target'])
+        # green_goal = Subgoal('green_goal', 3, 3, all_info['green_goal'])
+        # blue_target = Subgoal('blue_target', 4, 4, all_info['blue_target'])
+        # blue_goal = Subgoal('blue_goal', 5, 5, all_info['blue_goal'])
 
-        return [red_target, red_goal, green_target, green_goal, blue_target, blue_goal]
+        return [red_target, red_goal, green_target, blue_target]
 
         
     def render(self):
@@ -128,14 +147,14 @@ class RobotEnv(gym.Env):
                 'obj': self.red_goal,
                 'pos': np.array(self.red_goal.get_position()),
             },
-            'green_goal': {
-                'obj': self.green_goal,
-                'pos': np.array(self.green_goal.get_position()),
-            },
-            'blue_goal': {
-                'obj': self.blue_goal,
-                'pos': np.array(self.blue_goal.get_position()),
-            },
+            # 'green_goal': {
+            #     'obj': self.green_goal,
+            #     'pos': np.array(self.green_goal.get_position()),
+            # },
+            # 'blue_goal': {
+            #     'obj': self.blue_goal,
+            #     'pos': np.array(self.blue_goal.get_position()),
+            # },
             'red_target': {
                 'obj': self.red_target,
                 'pos': np.array(self.red_target.get_position()),
@@ -186,6 +205,76 @@ class RobotEnv(gym.Env):
         # obs = self._get_state()
         # return obs
 
+    # convert [j0, j1, j2, j3, vj0, vj1, vj2, vj3]
+    # to [x, y, z]
+    def fk_state(self, state):
+        initial_state = self.agent.get_joint_positions()
+
+        # if tuple(initial_state) in self.fk_dict:
+            # return np.array(self.fk_dict[tuple(initial_state)])
+        # else:
+        new_state = self.agent.get_joint_positions()
+        new_state[:4] = state[:4]
+        if tuple(new_state[:4]) in self.fk_dict:
+            return np.array(self.fk_dict[tuple(new_state[:4])])
+        else:
+            print('not in fk_dict: ', tuple(new_state[:4]))
+            self.agent.set_joint_positions(new_state)
+            fk_state = self.agent.get_tip().get_position()
+            self.fk_dict[tuple(new_state[:4])] = tuple(fk_state)
+            self.agent.set_joint_positions(initial_state)
+            # print(new_state, fk_state)
+            return fk_state
+    
+    def get_current_propositions(self, info=None, obj_name=None, threshold=0.02):
+        idx_dict = {'red_target': 0, 'red_goal': 1, 'green_target': 2, 'blue_target': 3}
+        if info is not None and obj_name is not None:
+            props = [0]*(len(idx_dict) + 1)
+            if info['grasped'] == True or info['released'] == True:
+                idx = idx_dict[obj_name]
+                props[idx] = 1
+                return props
+
+        state = self.agent.get_tip().get_position()
+        return self.get_propositions(state, threshold)
+
+    def get_propositions(self, state, threshold=0.02):
+        # state = [x, y, z]
+        state = np.array(state)
+        if len(state) > 3:
+            state = self.fk_state(state)
+
+        # all_info = self.all_info
+        # red_target = all_info['red_target']['pos']
+        # red_goal = all_info['red_goal']['pos']
+        # green_target = all_info['green_target']['pos']
+        # # green_goal = all_info['green_goal']['pos']
+        # blue_target = all_info['blue_target']['pos']
+        # # blue_goal = all_info['blue_goal']['pos']
+
+        red_target = self.subgoals[0].ik_state
+        red_goal = self.subgoals[1].ik_state
+        green_target = self.subgoals[2].ik_state
+        # green_goal = self.subgoals[3].ik_state
+        blue_target = self.subgoals[3].ik_state
+        # blue_goal = self.subgoals[5].ik_state
+
+        positions = [red_target, red_goal, green_target, blue_target]
+        fk_positions = []
+        for p in positions:
+            fk_p = self.fk_state(p)
+            fk_positions.append(fk_p)
+        nP = len(positions)
+        props = [0]*(nP+1)
+
+        for i, position in enumerate(fk_positions):
+            if np.linalg.norm(state - position) < threshold:
+                props[i] = 1
+
+        if not np.any(props):
+            props[-1] = 1
+
+        return props
         
     def reset(self):
         # Get a random position within a cuboid and set the target position
@@ -315,14 +404,33 @@ if __name__ == "__main__":
     agent = Agent()
     replay_buffer = []
 
-    for _ in range(500):
-        # env.gripper.grasp(env.target)
-        while not env.gripper.actuate(amount=0.5, velocity=0.01):
-           env.pr.step()
-        #env.gripper.actuate(amount=0.5, velocity=0.01)
-        action = np.array(4*[0])
-        #action[0] = 1.
-        reward, next_state, _, _ = env.step(action)
+    #env.agent.set_ik_group_properties(resolution_method='damped_least_squares', dls_damping=0.1)
+    #env.agent.set_ik_element_properties(constraint_alpha_beta=False, constraint_gamma=False)
+
+    env.agent.set_joint_positions(env.agent.get_joint_positions())
+    print(env.agent.get_joint_positions())
+    p1 = env.target.get_position()
+    q1 = env.target.get_quaternion()
+    o1 = env.target.get_orientation()
+    #env.agent.get_configs_for_tip_pose(position=p1, quaternion=o1, relative_to=env.agent)
+
+    import math
+    path = env.agent.get_path(position=[0.98,0.14,1.19], euler=[0, math.radians(180), 0])
+    print(path)
+    
+    # p = env.target.get_position(env.agent_ee_tip)
+    # o = env.target.get_quaternion(env.agent_ee_tip)
+    # print(p, o)
+    # print(env.agent.get_configs_for_tip_pose(position=p, quaternion=o, relative_to=env.agent_ee_tip))
+    
+    # for _ in range(500):
+    #     # env.gripper.grasp(env.target)
+    #     while not env.gripper.actuate(amount=0.5, velocity=0.01):
+    #        env.pr.step()
+    #     #env.gripper.actuate(amount=0.5, velocity=0.01)
+    #     action = np.array(4*[0])
+    #     #action[0] = 1.
+    #     reward, next_state, _, _ = env.step(action)
    
     
     # EPISODES = 2

@@ -18,6 +18,7 @@ import gym
 from spinup.algos.pytorch.ppo.ppo import ppo
 import torch
 import time
+import math
 import pdb
 
 from pyrep.const import RenderMode
@@ -60,9 +61,18 @@ class RobotEnv(gym.Env):
         
         self.agent_config_tree = self.agent.get_configuration_tree()
 
+        self.agent.set_joint_positions(self.agent.get_joint_positions())
+
 if __name__ == '__main__':
-    re = RobotEnv()
-    re.agent.set_ik_element_properties(constraint_x=False, 
-        constraint_y=False, constraint_z=False, 
-        constraint_alpha_beta=False, constraint_gamma=False)
+    robenv = RobotEnv()
+    print(robenv.agent.get_tip().get_position())
+    print(robenv.agent.get_tip().get_orientation())
+    print(robenv.agent.solve_ik([1, 0, 1.47], [-3.14159, 0.244, -3.14159]))
+    
+    path = robenv.agent.get_path(position=[1, 0, 1.47], euler=[-3.14159, 0.244, -3.14159])
+    # path = robenv.agent.get_path(position=[1, 0, 1.1], euler=[0, 3.14159, 0])
+    # path = robenv.agent.get_path(position=[0.98,0.14,1.19], euler=[0, math.radians(180), 0])
+    # path = robenv.agent.get_path(position=[ 0.94999975, -0.30000001,  1.10000002], euler=[0, 3.14159, 0])
+    print(path[-1]._path_points)
+
     pdb.set_trace()

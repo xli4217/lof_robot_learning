@@ -5,7 +5,7 @@ import numpy as np
 # changed state_index to just state
 class Subgoal(object):
 
-    def __init__(self, name, prop_index, subgoal_index, state):
+    def __init__(self, name, prop_index, subgoal_index, state, ik_state):
         self.name = name
         # index in the overall list of props
         self.prop_index = prop_index
@@ -13,6 +13,7 @@ class Subgoal(object):
         # the same as the prop_index)
         self.subgoal_index = subgoal_index
         self.state = state
+        self.ik_state = ik_state
 
 # no modifications from discrete case
 class TaskSpec(object):
@@ -69,6 +70,7 @@ class MetaPolicyBase(object):
 
     def __init__(self, subgoals, task_spec, safety_props, safety_specs, env,
                  num_episodes=1000, episode_length=100, gamma=1., alpha=0.5, epsilon=0.3):
+        self.env = env
         self.task_spec = task_spec
         self.tm = task_spec.tm
         # instances of Subgoal
@@ -101,7 +103,7 @@ class MetaPolicyBase(object):
 class ContinuousMetaPolicy(MetaPolicyBase):
     def __init__(self, subgoals, task_spec, safety_props, safety_specs, env, options,
                  num_episodes=1000, episode_length=100, gamma=1., alpha=0.5, epsilon=0.3,
-                 record_training=False, recording_frequency=5, experiment_num=0, num_hq_iter=1000):
+                 record_training=False, recording_frequency=5, experiment_num=0, num_hq_iter=400):
         super().__init__(subgoals, task_spec, safety_props, safety_specs, env,
                          num_episodes, episode_length, gamma, alpha, epsilon)
 
@@ -117,9 +119,9 @@ class ContinuousMetaPolicy(MetaPolicyBase):
 
         # basically, a list of option starting states
         # aka the initial state and the goal states
-        self.start_states = [tuple(env.all_info['ee_p'])]
-        for subgoal in self.subgoals:
-            self.start_states.append(tuple(subgoal.state))
+        self.start_states = self.make_start_states(env)
+        # for subgoal in self.subgoals:
+            # self.start_states.append(tuple(subgoal.state))
 
         self.nF = task_spec.nF
         self.options = options
@@ -131,14 +133,47 @@ class ContinuousMetaPolicy(MetaPolicyBase):
         # which will involve adding a new start state that is also technically a goal state.
         # but I don't want to mess with the goal states, just the start states.
         self.option_rewards = self.make_option_reward_function(env)
-        self.poss = self.make_poss(env.all_info['ee_p'])
+        # print(self.option_rewards)
+        # self.poss = self.make_poss(env.all_info['ee_p'])
 
         self.num_hq_iter = num_hq_iter # number of high q iterations
         self.Q = self.make_metapolicy(env, task_spec, num_iter=num_hq_iter)
 
+    # convert the target x,y,z positions into joint space positions
+    # and preserve the initial 'agent_joint_positions' as a start state
+    # return start states in the form [j0, j1, j2, j3, vj0, vj1, vj2, vj3]
+    def make_start_states(self, env):
+        info = env.all_info
+        start_states = []
+        start_vel = (0, 0, 0, 0)
+
+        states = {
+            'green_target': [0.24034619331359863, 0.44248393177986145, 0.43842342495918274, -1.5559585094451904, 0.0022624782286584377, 1.2168419361114502, 0.7836881875991821],
+            # 'green_goal': [-0.020605087280273438, 0.2608805000782013, -0.024641960859298706, -1.7960588932037354, 0.0022796443663537502, 1.2168171405792236, 0.7836595773696899],
+            'blue_target': [-0.10592365264892578, 0.2675664722919464, -0.23654529452323914, -1.800999402999878, 0.002284651156514883, 1.2168364524841309, 0.7836672067642212],
+            # 'blue_goal': [0.3583078384399414, 0.2378089725971222, 0.31930235028266907, -1.9656519889831543, 0.002270584460347891, 1.2168819904327393, 0.7836657762527466],
+            'red_target': [0.08351826667785645, 0.16150668263435364, -0.11060187220573425, -1.972297191619873, 0.0022682002745568752, 1.2168371677398682, 0.7836600542068481],
+            'red_goal': [-0.08144235610961914, 0.3910515606403351, -0.6666841506958008, -1.668611764907837, 0.0023123077116906643, 1.216784954071045, 0.783650279045105]
+        }
+
+        for name, data in info.items():
+            if name == 'agent_joint_positions':
+                start_states.append(tuple(data) + start_vel)
+            elif name != 'agent_joint_velocities':
+                pos = states[name][:4]
+                # this is the 'pointing down' orientation
+                # orientation = [0, 3.14159, 0]
+                # print(pos, orientation)
+                # path = env.agent.get_path(position=pos, euler=orientation)
+                # joint_pose = tuple(path[-1]._path_points[:4].tolist())
+                start_states.append(tuple(pos) + start_vel)
+        
+        return start_states
+
+
     # the 'transition function' of the options, a list of dictionaries of the form
     # self.poss = [option][start state : end state]
-    def make_poss(self, start_state):
+    def make_poss(self, start_states):
         posses = []
         for subgoal in self.subgoals:
             poss = {}
@@ -197,30 +232,41 @@ class ContinuousMetaPolicy(MetaPolicyBase):
 
     def make_option_reward_function(self, env):
         rewards = []
-        for subgoal in self.subgoals:        
+        # print('option rewards:')
+        for i, (option, subgoal) in enumerate(zip(self.options, self.subgoals)):        
             reward = {}
+            # start_states are in the form [j0, j1, j2, j3, vj0, vj1, vj2, vj3]
+            # subgoal states are in the form [x, y, z]
+            # just need to append the subgoal state to the start state to get a form
+            # valid for input to the value function of the option
             for start_state in self.start_states:
                 goal_state = subgoal.state
-                reward[tuple(start_state)] = self.get_reward_for_state(env, start_state, goal_state).item()
+                state = start_state + tuple(goal_state)
+                # print(start_state, state)
+                reward[tuple(start_state)] = option.get_value(torch.Tensor(state).float()).item()
+                # print(i, subgoal.name, reward[tuple(start_state)])
             rewards.append(reward)
         return rewards
 
-    def is_terminated(self, env, state, option):
-        props = env.get_propositions(state)
-        if props[option] == 1 or props[option+5] == 1:
+    # state should be [x, y, z] I hope lol
+    def is_terminated(self, env, option):
+        props = env.get_current_propositions()
+        if props[option] == 1:
             return True
         else:
             return False
         # return self.option.is_terminated(state)
 
-    def get_fsa_state(self, env, f, tm=None):
+    def get_fsa_state(self, env, f, info=None, obj_name=None, tm=None):
         # if a tm is given, use that one. otherwise use the tm
         # used during training
         if tm is None:
             tm = self.tm
-        props = env.get_current_propositions(threshold=0.02)
+        props = env.get_current_propositions(info, obj_name, threshold=0.02)
         p = np.where(np.array(props) == 1)[0][0]
-        next_f = np.argmax(tm[f, :, p])        
+        next_f = np.argmax(tm[f, :, p])  
+        print(props, next_f)
+        # print(tm[f])      
         return next_f
 
     def init_value_function(self, nF):
@@ -259,13 +305,15 @@ class ContinuousMetaPolicy(MetaPolicyBase):
 
         # Q[(option, state, option)]
         Q = {}
+        # print(num_iter)
         for k in range(num_iter):
             for f in range(self.nF):
-                for s in self.start_states:
+                for i, s in enumerate(self.start_states):
                     s = tuple(s)
                     best_o = 0
                     best_o_value = -np.inf
-                    for o, poss in enumerate(self.poss):
+                    # for o, poss in enumerate(self.poss):
+                    for o in range(len(self.options)):
                         # if s not in poss.keys():
                             # print("{} was not in poss.keys()".format(s))
                             # poss[s] = s
@@ -273,12 +321,21 @@ class ContinuousMetaPolicy(MetaPolicyBase):
                             print("{} was not in rewards[{}].keys()".format(s, o))
                             self.option_rewards[o][s] = -1.
                         
-                        ns = tuple(self.subgoals[o].state)
+                        ns = tuple(self.subgoals[o].ik_state)[:4] + (0, 0, 0, 0)
                         props = env.get_propositions(ns, threshold=0.02)
                         p = np.where(np.array(props) == 1)
+                        # print(props)
+                        # print(self.tm[f])
+                        # print(p, f)
                         nf = np.argmax(self.tm[f, :, p])
                         # ns = tuple(poss[s])
-                        Q[(f, s, o)] = float(R[f])*float(self.option_rewards[o][s] - 1) + float(V[(nf, ns)])
+                        Q[(f, s, o)] = R[f]*(self.option_rewards[o][s] - 1.0) + V[(nf, ns)]
+                        # if f == self.nF - 2 and k % 100 == 0 and i == 0:
+                        #     print('-------- ', k, ' o: ', o, ' props: ', props)
+                        #     print(V[(nf, ns)], nf, ns)
+                        #     print(R[f]*(self.option_rewards[o][s] - 1), f, s)
+                        #     print(Q[(f, s, o)])
+                        #     print('++++++++')
                         # if f == 3 and o == 2:
                             # print('f')
                         if Q[(f, s, o)] > best_o_value:
@@ -293,7 +350,9 @@ class ContinuousMetaPolicy(MetaPolicyBase):
                     p = np.where(np.array(props) == 1)
                     nf = np.argmax(self.tm[f, :, p])
                     V[(f, s)] = V[(nf, s)]
-
+        # print('value function')
+        # for s in self.start_states:
+        #     print(V[(0, s)], s)
         return Q
 
     def listQ(self, Q):
@@ -304,11 +363,13 @@ class ContinuousMetaPolicy(MetaPolicyBase):
         for key, value in V.items():
             print(key, value)
 
-    def get_closest_state(self, state):
+    def get_closest_state(self, state, fk_state):
+        state = state[:4] + (0, 0, 0, 0)
         closest_state = None
         closest_dist = np.inf
         for s in self.start_states:
-            dist = np.linalg.norm(np.array(state) - np.array(s))
+            fk_s = self.env.fk_state(s)
+            dist = np.linalg.norm(np.array(fk_state) - np.array(fk_s))
             if dist < closest_dist and dist < 0.02:
                 closest_dist = dist
                 closest_state = s
@@ -322,17 +383,20 @@ class ContinuousMetaPolicy(MetaPolicyBase):
             return 0
         
         # Q: f x s x o
-        state = self.get_closest_state(tuple(env.all_info['ee_p']))
+        state = self.get_closest_state(tuple(env.agent.get_joint_positions()), tuple(env.agent.get_tip().get_position()))
         if state not in self.start_states:
             self.start_states.append(state)
             self.option_rewards = self.make_option_reward_function(env)
-            self.poss = self.make_poss(state)
+            # self.poss = self.make_poss(state)
             self.Q = self.make_metapolicy(env, self.task_spec, num_iter=self.num_hq_iter)
             # print('hi')
 
         best_option = 0
         best_option_value = -np.inf
+        print("get options Q values")
         for o in range(len(self.subgoals)):
+            print(self.Q[(f, state, o)], f, o, state)
+            print(self.option_rewards[o][state])
             if self.Q[(f, state, o)] > best_option_value:
                 best_option = o
                 best_option_value = self.Q[(f, state, o)]
