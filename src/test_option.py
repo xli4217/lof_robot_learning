@@ -49,7 +49,9 @@ class Option(object):
 ###############
 # Load Option #
 ###############
-option_load_path = os.path.join(os.environ['PKG_PATH'], 'src', 'model3500.pt' )
+# option_load_path = os.path.join(os.environ['PKG_PATH'], 'src', 'model3500.pt' )
+option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo', 'pyt_save', 'model6000.pt' )
+
 # red_pick_option = Option(option_load_path, pick_or_place='pick', target='red_target')
 # blue_pick_option = Option(option_load_path, pick_or_place='pick', target='blue_target')
 # green_pick_option = Option(option_load_path, pick_or_place='pick', target='green_target')

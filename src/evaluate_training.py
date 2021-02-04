@@ -98,26 +98,24 @@ def save_dataset(exp_name, method_name, task_name, epoch, results):
     np.savez(path_name, results)
 
 def test_all_epochs(metapolicy_class, metapolicy_name, task, task_name):
-    # epochs = [i for i in range(0, 900, 50)] + [899]
-    epochs = [3500]
+    epochs = [i for i in range(0, 7501, 250)]
+    # epochs = [6500]
     num_tests = 1
+    # render_camera = False
+    # env = RobotEnv(headless=True, render_camera=render_camera, option_rollout=True, episode_len=300)
+
     for epoch in epochs:
         results = test_epoch(epoch, metapolicy_class, task, metapolicy_name, num_tests=num_tests)
         save_dataset('lunchbox', metapolicy_name, task_name, epoch, results)
 
 def test_epoch(epoch, metapolicy_class, task, metapolicy_name, num_tests=10):
-    # option_load_path = os.path.join(os.environ['LOF_PKG_PATH'], 'experiments',
-    #     'red', 'pyt_save', 'model{}.pt'.format(epoch))
-    option_load_path = os.path.join(os.environ['PKG_PATH'], 'src', 'model{}.pt'.format(epoch))
+    # option_load_path = os.path.join(os.environ['PKG_PATH'], 'src', 'model{}.pt'.format(epoch))
+    option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo2', 'pyt_save', 'model{}.pt'.format(epoch))
 
-    # with open(os.devnull, "w") as f, contextlib.redirect_stdout(f):
-        # option = Option(option_load_path)
     pick_red_option = Option(option_load_path, pick_or_place='pick', target='red_target')
     place_red_option = Option(option_load_path, pick_or_place='place', target='red_goal')
     pick_green_option = Option(option_load_path, pick_or_place='pick', target='green_target')
-    # place_green_option = Option(option_load_path, pick_or_place='place', target='green_goal')
     pick_blue_option = Option(option_load_path, pick_or_place='pick', target='blue_target')
-    # place_blue_option = Option(option_load_path, pick_or_place='place', target='blue_goal')
     
     options = [pick_red_option, place_red_option, pick_green_option,
                pick_blue_option]
@@ -135,9 +133,8 @@ def test_epoch(epoch, metapolicy_class, task, metapolicy_name, num_tests=10):
 def run_rollout(task_spec, policies, num_episodes, metapolicy_class):
     _, safety_props = make_taskspec_lunchbox()
     safety_specs = make_safetyspecs_reacher()
-    # subgoals = make_subgoals_reacher(env)
 
-    option_to_color = {0: 'rt', 1: 'rg', 2: 'gt', 3: 'gg', 4: 'bt', 5: 'bg'}
+    option_to_color = {0: 'rt', 1: 'rg', 2: 'gt', 3: 'bt'}
     goal_state = task_spec.nF - 1
 
     rewards = []
@@ -145,15 +142,16 @@ def run_rollout(task_spec, policies, num_episodes, metapolicy_class):
     successes = []
 
     render_camera = False
-    env = RobotEnv(headless=False, render_camera=render_camera, option_rollout=True, episode_len=300)
+    env = RobotEnv(headless=True, render_camera=render_camera, option_rollout=True, episode_len=300)
+
 
     for i in range(num_episodes):
         # env = Monitor(env, './video', video_callable=lambda episode_id: True, force=True)
-        subgoals = env.subgoals
 
         task_done = False
         R = 0
         obs = env.reset()
+        subgoals = env.subgoals
 
         metapolicy = metapolicy_class(subgoals, task_spec, safety_props, safety_specs, env, policies)
 
@@ -167,12 +165,24 @@ def run_rollout(task_spec, policies, num_episodes, metapolicy_class):
         stop_high_level = False
         terminated = False
 
-        while not task_done:
+        while not task_done and R > -200 and num_steps < 50:
+            print("EPISODE {} STEP {} REWARD {}##################".format(i, num_steps, R))
+            num_steps += 1
             done = False
             if not stop_high_level:
                 env.soft_reset()
                 option = metapolicy.get_option(env, f)
-                print(f, option, option_to_color[option], env_f)
+                print("FSA: {}, option: {}, option name: {}, envf: {}".format(f, option, option_to_color[option], env_f))
+                # rt = tuple(metapolicy.subgoals[0].state)
+                # rg = tuple(metapolicy.subgoals[1].state)
+                # gt = tuple(metapolicy.subgoals[2].state)
+                # bt = tuple(metapolicy.subgoals[3].state)
+                # rtik = tuple(metapolicy.subgoals[0].ik_state)[:4] + (0, 0, 0, 0)
+                # rgik = tuple(metapolicy.subgoals[1].ik_state)[:4] + (0, 0, 0, 0)
+                # gtik = tuple(metapolicy.subgoals[2].ik_state)[:4] + (0, 0, 0, 0)
+                # btik = tuple(metapolicy.subgoals[3].ik_state)[:4] + (0, 0, 0, 0)
+                # init = metapolicy.start_states[-1]
+                # pdb.set_trace()
             if prev_option == option and terminated:
                 stop_high_level = True
             prev_option = option
@@ -202,11 +212,19 @@ def run_rollout(task_spec, policies, num_episodes, metapolicy_class):
                     break
                 else:
                     terminated = False
+            # print(done, env.get_current_propositions())
+            # pdb.set_trace()
+
+        if num_steps == 50:
+            print("50 steps")
+            R = -200
 
         rewards.append(R)
         final_fsa_states.append(f)
         successes.append(success)      
         print(f"Episode {i} return: {R} | FSA: {f}")
+
+    env.shutdown()
 
     # env_can.close()
     # env_not.close()
@@ -219,13 +237,11 @@ def run_all_tests():
     taskspec_lunchbox, _ = make_taskspec_lunchbox()
 
     # metapolicies = [ContinuousMetaPolicy, GreedyContinuousMetaPolicy, FSAQLearningContinuousMetaPolicy, FlatQLearningContinuousMetaPolicy]
-    # metapolicy_names = [, 'greedy', 'fsa', 'flat']
-    # tasks = [task_spec_composite, task_spec_sequential, task_spec_if, task_spec_or]
-    # task_names = ['composite', 'sequential', 'IF', 'OR']
+    # metapolicy_names = ['lof', 'greedy', 'fsa', 'flat']
     metapolicies = [ContinuousMetaPolicy]
     metapolicy_names = ['lof']
     tasks = [taskspec_lunchbox]
-    task_names = ['OR']
+    task_names = ['lunchbox']
 
     for metapolicy, metapolicy_name in zip(metapolicies, metapolicy_names):
         for task, task_name in zip(tasks, task_names):

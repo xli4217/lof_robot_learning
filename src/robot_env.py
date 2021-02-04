@@ -109,33 +109,26 @@ class RobotEnv(gym.Env):
         
         self.update_all_info()
 
-        self.subgoals = self.make_subgoals()
+        self.subgoals = None
 
     def make_subgoals(self):
         # name, prop_index, subgoal_index, state
         all_info = self.all_info
         states = {
-                'green_target': [0.24034619331359863, 0.44248393177986145, 0.43842342495918274, -1.5559585094451904, 0.0022624782286584377, 1.2168419361114502, 0.7836881875991821],
-                # 'green_goal': [-0.020605087280273438, 0.2608805000782013, -0.024641960859298706, -1.7960588932037354, 0.0022796443663537502, 1.2168171405792236, 0.7836595773696899],
-                'blue_target': [-0.10592365264892578, 0.2675664722919464, -0.23654529452323914, -1.800999402999878, 0.002284651156514883, 1.2168364524841309, 0.7836672067642212],
-                # 'blue_goal': [0.3583078384399414, 0.2378089725971222, 0.31930235028266907, -1.9656519889831543, 0.002270584460347891, 1.2168819904327393, 0.7836657762527466],
-                'red_target': [0.08351826667785645, 0.16150668263435364, -0.11060187220573425, -1.972297191619873, 0.0022682002745568752, 1.2168371677398682, 0.7836600542068481],
-                'red_goal': [-0.08144235610961914, 0.3910515606403351, -0.6666841506958008, -1.668611764907837, 0.0023123077116906643, 1.216784954071045, 0.783650279045105]
+               'red_target': [0.1061546802520752, 0.6898090839385986, 0.25773075222969055, -1.8561604022979736, -0.0020071216858923435, 1.217017412185669, 0.7869886159896851],
+                'red_goal': [-0.33927488327026367, 0.4343113899230957, -0.23959800601005554, -1.62320876121521, -0.0019444175995886326, 1.2168865203857422, 0.786967396736145],
+                'green_target': [-0.2507748603820801, 0.617473840713501, -0.10747954249382019, -1.568331241607666, -0.0018800445832312107, 1.2168655395507812, 0.7869387865066528],
+                'blue_target': [-0.24648523330688477, 0.3789811134338379, -0.1470303237438202, -1.6356382369995117, -0.0019618221558630466, 1.2168805599212646, 0.7869573831558228]
+                # 'green_target': [-0.04999828338623047, 0.42098501324653625, 0.5913615226745605, -1.6058857440948486, -0.000500077847391367, 1.218733549118042, 0.7857886552810669],
+                # 'blue_target': [-0.10592365264892578, 0.2675664722919464, -0.23654529452323914, -1.800999402999878, 0.002284651156514883, 1.2168364524841309, 0.7836672067642212],
+                # 'red_target': [0.08351826667785645, 0.16150668263435364, -0.11060187220573425, -1.972297191619873, 0.0022682002745568752, 1.2168371677398682, 0.7836600542068481],
+                # 'red_goal': [-0.08144235610961914, 0.3910515606403351, -0.6666841506958008, -1.668611764907837, 0.0023123077116906643, 1.216784954071045, 0.783650279045105]
             }
         red_target = Subgoal('red_target', 0, 0, all_info['red_target']['pos'], states['red_target'])
         red_goal = Subgoal('red_goal', 1, 1, all_info['red_goal']['pos'], states['red_goal'])
         green_target = Subgoal('green_target', 2, 2, all_info['green_target']['pos'], states['green_target'])
-        # green_goal = Subgoal('green_goal', 3, 3, all_info['green_goal']['pos'], states['green_goal'])
-        blue_target = Subgoal('blue_target', 4, 4, all_info['blue_target']['pos'], states['blue_target'])
-        # blue_goal = Subgoal('blue_goal', 5, 5, all_info['blue_goal']['pos'], states['blue_goal'])
+        blue_target = Subgoal('blue_target', 3, 3, all_info['blue_target']['pos'], states['blue_target'])
         
-        # red_target = Subgoal('red_target', 0, 0, all_info['red_target'])
-        # red_goal = Subgoal('red_goal', 1, 1, all_info['red_goal'])
-        # green_target = Subgoal('green_target', 2, 2, all_info['green_target'])
-        # green_goal = Subgoal('green_goal', 3, 3, all_info['green_goal'])
-        # blue_target = Subgoal('blue_target', 4, 4, all_info['blue_target'])
-        # blue_goal = Subgoal('blue_goal', 5, 5, all_info['blue_goal'])
-
         return [red_target, red_goal, green_target, blue_target]
 
         
@@ -193,19 +186,7 @@ class RobotEnv(gym.Env):
     # and you don't want to reset the environment, just reset
     # a few parameters before the option runs
     def soft_reset(self):
-        # # Get a random position within a cuboid and set the target position
-        # self.t_start = time.time()
-        
-        # # reset gripper
-        # self.gripper.release()
-        # while not self.gripper.actuate(amount=1., velocity=0.01):
-        #     self.pr.step()
-        
         self.current_step = 0
-
-        # self.update_all_info()
-        # obs = self._get_state()
-        # return obs
 
     # convert [j0, j1, j2, j3, vj0, vj1, vj2, vj3]
     # to [x, y, z]
@@ -220,7 +201,7 @@ class RobotEnv(gym.Env):
         if tuple(new_state[:4]) in self.fk_dict:
             return np.array(self.fk_dict[tuple(new_state[:4])])
         else:
-            print('not in fk_dict: ', tuple(new_state[:4]))
+            # print('not in fk_dict: ', tuple(new_state[:4]))
             self.agent.set_joint_positions(new_state)
             fk_state = self.agent.get_tip().get_position()
             self.fk_dict[tuple(new_state[:4])] = tuple(fk_state)
@@ -246,20 +227,10 @@ class RobotEnv(gym.Env):
         if len(state) > 3:
             state = self.fk_state(state)
 
-        # all_info = self.all_info
-        # red_target = all_info['red_target']['pos']
-        # red_goal = all_info['red_goal']['pos']
-        # green_target = all_info['green_target']['pos']
-        # # green_goal = all_info['green_goal']['pos']
-        # blue_target = all_info['blue_target']['pos']
-        # # blue_goal = all_info['blue_goal']['pos']
-
         red_target = self.subgoals[0].ik_state
         red_goal = self.subgoals[1].ik_state
         green_target = self.subgoals[2].ik_state
-        # green_goal = self.subgoals[3].ik_state
         blue_target = self.subgoals[3].ik_state
-        # blue_goal = self.subgoals[5].ik_state
 
         positions = [red_target, red_goal, green_target, blue_target]
         fk_positions = []
@@ -296,21 +267,19 @@ class RobotEnv(gym.Env):
             for target in ['red_target', 'green_target', 'blue_target']:
                 # p = list(np.random.uniform(POS_MIN, POS_MAX))
                 if target == 'red_target':
-                    #    y  x    z
-                    p = [0.95, 0, 1.1]
-                    # p = [0.995571017403438, -0.26717585812859207, 1.22541053485359]
-                elif target == 'blue_target':
-                    # p = [0.9253633645046548, -0.2429622263626289, 1.2934958440409452]
-                    p = [1, -0.15, 1.1]
-                    # p = [1.028885866489908, -0.14226173186552954, 1.1467473336227838]
+                    #       y  x    z
+                    p = [0.95, 0.2, 0.9]
                 elif target == 'green_target':
-                    p = [1, 0.35, 1.1]
+                    p = [1, -0.15, 1.0]
+                elif target == 'blue_target':
+                    p = [1, -0.15, 1.1]
                 self.all_info[target]['obj'].set_position(p)
         
         self.agent.set_joint_positions(self.initial_joint_positions)
         self.current_step = 0
 
         self.update_all_info()
+        self.subgoals = self.make_subgoals()
         obs = self._get_state()
         return obs
 
@@ -351,7 +320,7 @@ class RobotEnv(gym.Env):
                     print("Grasped")
                 else:
                     info['grasped'] = False
-            elif action[0] == 1 and np.linalg.norm(np.array(self.agent_ee_tip.get_position()) - np.array(self.all_info[obj_name]['pos'])) < 0.05: # open
+            elif action[0] == 1 and np.linalg.norm(np.array(self.agent_ee_tip.get_position()) - np.array(self.all_info[obj_name]['pos'])) < 0.08: # open
                 self.gripper.release()
                 while not self.gripper.actuate(amount=1., velocity=0.01):
                     self.pr.step()
@@ -360,16 +329,21 @@ class RobotEnv(gym.Env):
                 print("Released")
         r_action = - np.linalg.norm(action)
         
-        if dist > 0.2:
-            r_dist = -dist
+        eval = True
+
+        if eval:
+            reward = 0.2*(-0.1 + r_action)
         else:
-            r_dist = 0.01/dist
+            if dist > 0.2:
+                r_dist = -dist
+            else:
+                r_dist = 0.01/dist
             
-        reward = r_dist + r_action
-        reward *= 0.2
-        if dist < 0.01:
-            reward += 0.5
-            # done = True
+            reward = r_dist + r_action
+            reward *= 0.2
+            if dist < 0.01:
+                reward += 0.5
+                # done = True
 
         self.current_step += 1
         if self.current_step >= self.episode_len:

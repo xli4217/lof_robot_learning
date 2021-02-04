@@ -31,8 +31,8 @@ class TaskSpec(object):
 class Option(object):
     def __init__(self, load_path:str, pick_or_place='pick', target='red_target'):
         self.ac = torch.load(load_path)
-        print(self.ac)
-        print(type(self.ac))
+        # print(self.ac)
+        # print(type(self.ac))
 
         self.target_name = target
         self.pick_or_place = pick_or_place
@@ -99,6 +99,84 @@ class MetaPolicyBase(object):
     def init_poss(self, subgoals):
         raise NotImplementedError
 
+    # convert the target x,y,z positions into joint space positions
+    # and preserve the initial 'agent_joint_positions' as a start state
+    # return start states in the form [j0, j1, j2, j3, vj0, vj1, vj2, vj3]
+    def make_start_states(self, env):
+        info = env.all_info
+        start_states = []
+        start_vel = (0, 0, 0, 0)
+
+        states = {
+            'red_target': [0.1061546802520752, 0.6898090839385986, 0.25773075222969055, -1.8561604022979736, -0.0020071216858923435, 1.217017412185669, 0.7869886159896851],
+                'red_goal': [-0.33927488327026367, 0.4343113899230957, -0.23959800601005554, -1.62320876121521, -0.0019444175995886326, 1.2168865203857422, 0.786967396736145],
+                'green_target': [-0.2507748603820801, 0.617473840713501, -0.10747954249382019, -1.568331241607666, -0.0018800445832312107, 1.2168655395507812, 0.7869387865066528],
+                'blue_target': [-0.24648523330688477, 0.3789811134338379, -0.1470303237438202, -1.6356382369995117, -0.0019618221558630466, 1.2168805599212646, 0.7869573831558228]
+        }
+
+        for name, data in info.items():
+            if name == 'agent_joint_positions':
+                start_states.append(tuple(data) + start_vel)
+            elif name != 'agent_joint_velocities':
+                pos = states[name][:4]
+                start_states.append(tuple(pos) + start_vel)
+        
+        return start_states
+
+    def make_reward_function(self, task_spec):
+        return task_spec.task_state_costs
+
+    def make_option_reward_function(self, env):
+        rewards = []
+        for i, (option, subgoal) in enumerate(zip(self.options, self.subgoals)):        
+            reward = {}
+            # start_states are in the form [j0, j1, j2, j3, vj0, vj1, vj2, vj3]
+            # subgoal states are in the form [x, y, z]
+            # just need to append the subgoal state to the start state to get a form
+            # valid for input to the value function of the option
+            for start_state in self.start_states:
+                goal_state = subgoal.state
+                state = start_state + tuple(goal_state)
+                # print(start_state, state)
+                reward[tuple(start_state)] = option.get_value(torch.Tensor(state).float()).item()
+                # print(i, subgoal.name, reward[tuple(start_state)])
+            rewards.append(reward)
+        return rewards
+
+    # state should be [x, y, z] I hope lol
+    def is_terminated(self, env, option):
+        props = env.get_current_propositions()
+        if props[option] == 1:
+            return True
+        else:
+            return False
+
+    def get_closest_state(self, state, fk_state):
+        state = state[:4] + (0, 0, 0, 0)
+        closest_state = None
+        closest_dist = np.inf
+        for s in self.start_states:
+            fk_s = self.env.fk_state(s)
+            dist = np.linalg.norm(np.array(fk_state) - np.array(fk_s))
+            if dist < closest_dist and dist < 0.02:
+                closest_dist = dist
+                closest_state = s
+        if closest_state is None:
+            closest_state = state
+        return tuple(closest_state)
+
+    def get_fsa_state(self, env, f, info=None, obj_name=None, tm=None):
+        # if a tm is given, use that one. otherwise use the tm
+        # used during training
+        if tm is None:
+            tm = self.tm
+        props = env.get_current_propositions(info, obj_name, threshold=0.02)
+        p = np.where(np.array(props) == 1)[0][0]
+        next_f = np.argmax(tm[f, :, p])  
+        # print(props, next_f)
+        # print(tm[f])      
+        return next_f
+
 # LOF class for metapolicies on continuous spaces
 class ContinuousMetaPolicy(MetaPolicyBase):
     def __init__(self, subgoals, task_spec, safety_props, safety_specs, env, options,
@@ -139,38 +217,6 @@ class ContinuousMetaPolicy(MetaPolicyBase):
         self.num_hq_iter = num_hq_iter # number of high q iterations
         self.Q = self.make_metapolicy(env, task_spec, num_iter=num_hq_iter)
 
-    # convert the target x,y,z positions into joint space positions
-    # and preserve the initial 'agent_joint_positions' as a start state
-    # return start states in the form [j0, j1, j2, j3, vj0, vj1, vj2, vj3]
-    def make_start_states(self, env):
-        info = env.all_info
-        start_states = []
-        start_vel = (0, 0, 0, 0)
-
-        states = {
-            'green_target': [0.24034619331359863, 0.44248393177986145, 0.43842342495918274, -1.5559585094451904, 0.0022624782286584377, 1.2168419361114502, 0.7836881875991821],
-            # 'green_goal': [-0.020605087280273438, 0.2608805000782013, -0.024641960859298706, -1.7960588932037354, 0.0022796443663537502, 1.2168171405792236, 0.7836595773696899],
-            'blue_target': [-0.10592365264892578, 0.2675664722919464, -0.23654529452323914, -1.800999402999878, 0.002284651156514883, 1.2168364524841309, 0.7836672067642212],
-            # 'blue_goal': [0.3583078384399414, 0.2378089725971222, 0.31930235028266907, -1.9656519889831543, 0.002270584460347891, 1.2168819904327393, 0.7836657762527466],
-            'red_target': [0.08351826667785645, 0.16150668263435364, -0.11060187220573425, -1.972297191619873, 0.0022682002745568752, 1.2168371677398682, 0.7836600542068481],
-            'red_goal': [-0.08144235610961914, 0.3910515606403351, -0.6666841506958008, -1.668611764907837, 0.0023123077116906643, 1.216784954071045, 0.783650279045105]
-        }
-
-        for name, data in info.items():
-            if name == 'agent_joint_positions':
-                start_states.append(tuple(data) + start_vel)
-            elif name != 'agent_joint_velocities':
-                pos = states[name][:4]
-                # this is the 'pointing down' orientation
-                # orientation = [0, 3.14159, 0]
-                # print(pos, orientation)
-                # path = env.agent.get_path(position=pos, euler=orientation)
-                # joint_pose = tuple(path[-1]._path_points[:4].tolist())
-                start_states.append(tuple(pos) + start_vel)
-        
-        return start_states
-
-
     # the 'transition function' of the options, a list of dictionaries of the form
     # self.poss = [option][start state : end state]
     def make_poss(self, start_states):
@@ -181,93 +227,6 @@ class ContinuousMetaPolicy(MetaPolicyBase):
             poss[tuple(subgoal.state)] = tuple(subgoal.state)
             posses.append(poss)
         return posses
-
-    # do inverse kinematics to get the joint angles
-    # of the 2-link reacher when the end effector
-    # is at a given goal
-    # note that the link lengths are assumed to be
-    # 0.1 and 0.1
-    # using equations from https://robotacademy.net.au/lesson/inverse-kinematics-for-a-2-joint-robot-arm-using-geometry/
-    def get_thetas_for_state(self, state):
-        x = state[0]
-        y = state[1]
-        a1 = 0.1
-        a2 = 0.1
-        # there are two possible solutions to the IK problem
-        # solution 1
-        q2_1 = np.arccos((x**2 + y**2 - a1**2 - a2**2)/(2*a1*a2))
-        q1_1 = np.arctan2(y, x) - np.arctan2(a2*np.sin(q2_1), a1 + a2*np.cos(q2_1))
-        # solution 2
-        q2_2 = -q2_1
-        q1_2 = np.arctan2(y, x) + np.arctan2(a2*np.sin(q2_2), a1 + a2*np.cos(q2_2))
-
-        return [[q1_1, q2_1], [q1_2, q2_2]]
-
-    # get the reward for going from a start state to a goal state
-    def get_reward_for_state(self, env, start_state, goal_state):
-        joint_velocity = [0, 0]
-
-        jp_1, jp_2 = self.get_thetas_for_state(goal_state)
-
-        state1 = np.concatenate([
-            np.cos(jp_1),
-            np.sin(jp_1),
-            goal_state,
-            joint_velocity,
-            start_state - goal_state
-        ])
-
-        state2 = np.concatenate([
-            np.cos(jp_2),
-            np.sin(jp_2),
-            goal_state,
-            joint_velocity,
-            start_state - goal_state
-        ])
-
-        value1 = self.option.get_value(torch.Tensor(state1).float())
-        value2 = self.option.get_value(torch.Tensor(state2).float())
-
-        return max(value1, value2)
-
-    def make_option_reward_function(self, env):
-        rewards = []
-        # print('option rewards:')
-        for i, (option, subgoal) in enumerate(zip(self.options, self.subgoals)):        
-            reward = {}
-            # start_states are in the form [j0, j1, j2, j3, vj0, vj1, vj2, vj3]
-            # subgoal states are in the form [x, y, z]
-            # just need to append the subgoal state to the start state to get a form
-            # valid for input to the value function of the option
-            for start_state in self.start_states:
-                goal_state = subgoal.state
-                state = start_state + tuple(goal_state)
-                # print(start_state, state)
-                reward[tuple(start_state)] = option.get_value(torch.Tensor(state).float()).item()
-                # print(i, subgoal.name, reward[tuple(start_state)])
-            rewards.append(reward)
-        return rewards
-
-    # state should be [x, y, z] I hope lol
-    def is_terminated(self, env, option):
-        props = env.get_current_propositions()
-        if props[option] == 1:
-            return True
-        else:
-            return False
-        # return self.option.is_terminated(state)
-
-    def get_fsa_state(self, env, f, info=None, obj_name=None, tm=None):
-        # if a tm is given, use that one. otherwise use the tm
-        # used during training
-        if tm is None:
-            tm = self.tm
-        props = env.get_current_propositions(info, obj_name, threshold=0.02)
-        p = np.where(np.array(props) == 1)[0][0]
-        next_f = np.argmax(tm[f, :, p])  
-        print(props, next_f)
-        # print(tm[f])      
-        return next_f
 
     def init_value_function(self, nF):
         V = {}
@@ -282,9 +241,6 @@ class ContinuousMetaPolicy(MetaPolicyBase):
                 #     # ns = poss[tuple(s)]
                 #     V[(i, tuple(ns))] = 0.
         return V
-
-    def make_reward_function(self, task_spec):
-        return task_spec.task_state_costs
 
     def make_metapolicy(self, env, task_spec, num_iter=1000):
         # TM: f x f x p
@@ -329,7 +285,7 @@ class ContinuousMetaPolicy(MetaPolicyBase):
                         # print(p, f)
                         nf = np.argmax(self.tm[f, :, p])
                         # ns = tuple(poss[s])
-                        Q[(f, s, o)] = R[f]*(self.option_rewards[o][s] - 1.0) + V[(nf, ns)]
+                        Q[(f, s, o)] = R[f]*(self.option_rewards[o][s] - 1000.0) + V[(nf, ns)]
                         # if f == self.nF - 2 and k % 100 == 0 and i == 0:
                         #     print('-------- ', k, ' o: ', o, ' props: ', props)
                         #     print(V[(nf, ns)], nf, ns)
@@ -363,20 +319,6 @@ class ContinuousMetaPolicy(MetaPolicyBase):
         for key, value in V.items():
             print(key, value)
 
-    def get_closest_state(self, state, fk_state):
-        state = state[:4] + (0, 0, 0, 0)
-        closest_state = None
-        closest_dist = np.inf
-        for s in self.start_states:
-            fk_s = self.env.fk_state(s)
-            dist = np.linalg.norm(np.array(fk_state) - np.array(fk_s))
-            if dist < closest_dist and dist < 0.02:
-                closest_dist = dist
-                closest_state = s
-        if closest_state is None:
-            closest_state = state
-        return tuple(closest_state)
-
     def get_option(self, env, f):
         if self.Q is None:
             print("policy not yet calculated!")
@@ -395,8 +337,8 @@ class ContinuousMetaPolicy(MetaPolicyBase):
         best_option_value = -np.inf
         print("get options Q values")
         for o in range(len(self.subgoals)):
-            print(self.Q[(f, state, o)], f, o, state)
-            print(self.option_rewards[o][state])
+            # print(self.Q[(f, state, o)], f, o, state)
+            # print(self.option_rewards[o][state])
             if self.Q[(f, state, o)] > best_option_value:
                 best_option = o
                 best_option_value = self.Q[(f, state, o)]
@@ -405,7 +347,7 @@ class ContinuousMetaPolicy(MetaPolicyBase):
 
 # LOF class for metapolicies on continuous spaces
 class FSAQLearningContinuousMetaPolicy(MetaPolicyBase):
-    def __init__(self, subgoals, task_spec, safety_props, safety_specs, env, option,
+    def __init__(self, subgoals, task_spec, safety_props, safety_specs, env, options,
                  num_episodes=1000, episode_length=100, gamma=1., alpha=0.5, epsilon=0.3,
                  record_training=False, recording_frequency=5, experiment_num=0, num_hq_iter=1000):
         super().__init__(subgoals, task_spec, safety_props, safety_specs, env,
@@ -423,99 +365,18 @@ class FSAQLearningContinuousMetaPolicy(MetaPolicyBase):
 
         # basically, a list of option starting states
         # aka the initial state and the goal states
-        self.start_states = [tuple(env.all_info['ee_p'])]
-        for subgoal in self.subgoals:
-            self.start_states.append(tuple(subgoal.state))
+        self.start_states = self.make_start_states(env)
+        # self.start_states = [tuple(env.all_info['ee_p'])]
+        # for subgoal in self.subgoals:
+            # self.start_states.append(tuple(subgoal.state))
 
         self.nF = task_spec.nF
-        self.option = option
+        self.options = options
         # self.option_rewards[option][(start_state(x, y)] = reward
         self.option_rewards = self.make_option_reward_function(env)
 
-        self.Q = self.high_level_q_learning(env, tuple(env.all_info['ee_p']), num_hq_iter=num_hq_iter)
-
-    # do inverse kinematics to get the joint angles
-    # of the 2-link reacher when the end effector
-    # is at a given goal
-    # note that the link lengths are assumed to be
-    # 0.1 and 0.1
-    # using equations from https://robotacademy.net.au/lesson/inverse-kinematics-for-a-2-joint-robot-arm-using-geometry/
-    def get_thetas_for_state(self, state):
-        x = state[0]
-        y = state[1]
-        a1 = 0.1
-        a2 = 0.1
-        # there are two possible solutions to the IK problem
-        # solution 1
-        q2_1 = np.arccos((x**2 + y**2 - a1**2 - a2**2)/(2*a1*a2))
-        q1_1 = np.arctan2(y, x) - np.arctan2(a2*np.sin(q2_1), a1 + a2*np.cos(q2_1))
-        # solution 2
-        q2_2 = -q2_1
-        q1_2 = np.arctan2(y, x) + np.arctan2(a2*np.sin(q2_2), a1 + a2*np.cos(q2_2))
-
-        return [[q1_1, q2_1], [q1_2, q2_2]]
-
-    # get the reward for going from a start state to a goal state
-    def get_reward_for_state(self, env, start_state, goal_state):
-        joint_velocity = [0, 0]
-
-        jp_1, jp_2 = self.get_thetas_for_state(goal_state)
-
-        state1 = np.concatenate([
-            np.cos(jp_1),
-            np.sin(jp_1),
-            goal_state,
-            joint_velocity,
-            start_state - goal_state
-        ])
-
-        state2 = np.concatenate([
-            np.cos(jp_2),
-            np.sin(jp_2),
-            goal_state,
-            joint_velocity,
-            start_state - goal_state
-        ])
-
-        value1 = self.option.get_value(torch.Tensor(state1).float())
-        value2 = self.option.get_value(torch.Tensor(state2).float())
-
-        return max(value1, value2)
-
-    def make_option_reward_function(self, env):
-        rewards = []
-        for subgoal in self.subgoals:        
-            reward = {}
-            for start_state in self.start_states:
-                goal_state = subgoal.state
-                reward[tuple(start_state)] = self.get_reward_for_state(env, start_state, goal_state).item()
-            rewards.append(reward)
-        return rewards
-
-    def listQ(self, Q):
-        for key, value in Q.items():
-            print(key, value)
-
-    def listV(self, V):
-        for key, value in V.items():
-            print(key, value)
-
-    def is_terminated(self, env, state, option):
-        props = env.get_propositions(state)
-        if props[option] == 1 or props[option+5] == 1:
-            return True
-        else:
-            return False
-
-    def get_fsa_state(self, env, f, tm=None):
-        # if a tm is given, use that one. otherwise use the tm
-        # used during training
-        if tm is None:
-            tm = self.tm
-        props = env.get_current_propositions(threshold=0.02)
-        p = np.where(np.array(props) == 1)[0][0]
-        next_f = np.argmax(tm[f, :, p])        
-        return next_f
+        start_state = tuple(env.agent.get_joint_positions()[:4]) + (0, 0, 0, 0)
+        self.Q = self.high_level_q_learning(env, start_state, num_hq_iter=num_hq_iter)
 
     def get_fsa_state_helper(self, env, state, f, tm=None):
         # if a tm is given, use that one. otherwise use the tm
@@ -526,9 +387,6 @@ class FSAQLearningContinuousMetaPolicy(MetaPolicyBase):
         p = np.where(np.array(props) == 1)[0][0]
         next_f = np.argmax(tm[f, :, p])        
         return next_f
-
-    def make_reward_function(self, task_spec):
-        return task_spec.task_state_costs
 
     def get_best_option(self, Q, f, state):
         state = tuple(state)
@@ -552,8 +410,6 @@ class FSAQLearningContinuousMetaPolicy(MetaPolicyBase):
         episode_length = 15
         gamma = 1.
         epsilon = 0.4
-
-        start_state = tuple(start_state)
         
         goal_state = task_spec.nF - 1
         for i in range(num_episodes):
@@ -566,10 +422,10 @@ class FSAQLearningContinuousMetaPolicy(MetaPolicyBase):
                 else:
                     option_index, _ = self.get_best_option(Q, f, current_state)
 
-                next_state = tuple(self.subgoals[option_index].state)
+                next_state = tuple(self.subgoals[option_index].ik_state[:4]) + (0, 0, 0, 0)
                 next_f = self.get_fsa_state_helper(env, next_state, f, task_spec.tm)
 
-                reward = task_spec.task_state_costs[f] * (self.option_rewards[option_index][current_state] - 1)
+                reward = task_spec.task_state_costs[f] * (self.option_rewards[option_index][current_state] - 1000.0)
 
                 q_update = reward + gamma * V[(next_f, next_state)] - Q[(f, current_state, option_index)]
                 Q[f, current_state, option_index] += alpha * q_update
@@ -601,33 +457,21 @@ class FSAQLearningContinuousMetaPolicy(MetaPolicyBase):
         
         return Q, V
 
-    def get_closest_state(self, state):
-        closest_state = None
-        closest_dist = np.inf
-        for s in self.start_states:
-            dist = np.linalg.norm(np.array(state) - np.array(s))
-            if dist < closest_dist and dist < 0.02:
-                closest_dist = dist
-                closest_state = s
-        if closest_state is None:
-            closest_state = state
-        return tuple(closest_state)
-
     def get_option(self, env, f):
         if self.Q is None:
             print("policy not yet calculated!")
             return 0
         
         # Q: f x s x o
-        state = self.get_closest_state(tuple(env.all_info['ee_p']))
+        state = self.get_closest_state(tuple(env.agent.get_joint_positions()), tuple(env.agent.get_tip().get_position()))
         if state not in self.start_states:
             self.start_states.append(state)
             self.option_rewards = self.make_option_reward_function(env)
             self.Q = self.high_level_q_learning(env, state, start_f=f)
-            # print('hi')
 
         best_option = 0
         best_option_value = -np.inf
+        print("get options Q values")
         for o in range(len(self.subgoals)):
             if self.Q[(f, state, o)] > best_option_value:
                 best_option = o
@@ -635,9 +479,10 @@ class FSAQLearningContinuousMetaPolicy(MetaPolicyBase):
 
         return best_option
 
+
 # LOF class for metapolicies on continuous spaces
 class FlatQLearningContinuousMetaPolicy(MetaPolicyBase):
-    def __init__(self, subgoals, task_spec, safety_props, safety_specs, env, option,
+    def __init__(self, subgoals, task_spec, safety_props, safety_specs, env, options,
                  num_episodes=1000, episode_length=100, gamma=1., alpha=0.5, epsilon=0.3,
                  record_training=False, recording_frequency=5, experiment_num=0):
         super().__init__(subgoals, task_spec, safety_props, safety_specs, env,
@@ -655,22 +500,18 @@ class FlatQLearningContinuousMetaPolicy(MetaPolicyBase):
 
         # basically, a list of option starting states
         # aka the initial state and the goal states
-        self.start_states = [tuple(env.all_info['ee_p'])]
-        for subgoal in self.subgoals:
-            self.start_states.append(tuple(subgoal.state))
+        self.start_states = self.make_start_states(env)
+        # self.start_states = [tuple(env.all_info['ee_p'])]
+        # for subgoal in self.subgoals:
+        #     self.start_states.append(tuple(subgoal.state))
 
         self.nF = task_spec.nF
-        self.option = option
+        self.options = options
         self.option_rewards = self.make_option_reward_function(env)
 
-        self.Q = self.high_level_q_learning(env, tuple(env.all_info['ee_p']))
+        start_state = tuple(env.agent.get_joint_positions()[:4]) + (0, 0, 0, 0)
+        self.Q = self.high_level_q_learning(env, start_state)
 
-    def is_terminated(self, env, state, option):
-        props = env.get_propositions(state)
-        if props[option] == 1 or props[option+5] == 1:
-            return True
-        else:
-            return False
 
     def get_best_option(self, Q, state):
         state = tuple(state)
@@ -709,14 +550,14 @@ class FlatQLearningContinuousMetaPolicy(MetaPolicyBase):
                 else:
                     option_index, _ = self.get_best_option(Q, current_state)
 
-                next_state = tuple(self.subgoals[option_index].state)
+                next_state = tuple(self.subgoals[option_index].ik_state[:4]) + (0, 0, 0, 0)
 
                 f = self.get_fsa_state_helper(env, next_state, f)
 
                 if f == goal_state:
                     reward = 0
                 else:
-                    reward = self.option_rewards[option_index][current_state]
+                    reward = self.option_rewards[option_index][current_state] - 1000
                     # to compensate for the fact that option reward is 0 at the goal
                     # but should be -1 for the overall policy
                     if reward == 0:
@@ -734,76 +575,6 @@ class FlatQLearningContinuousMetaPolicy(MetaPolicyBase):
                 num_steps += 1
 
         return Q
-
-
-
-    # do inverse kinematics to get the joint angles
-    # of the 2-link reacher when the end effector
-    # is at a given goal
-    # note that the link lengths are assumed to be
-    # 0.1 and 0.1
-    # using equations from https://robotacademy.net.au/lesson/inverse-kinematics-for-a-2-joint-robot-arm-using-geometry/
-    def get_thetas_for_state(self, state):
-        x = state[0]
-        y = state[1]
-        a1 = 0.1
-        a2 = 0.1
-        # there are two possible solutions to the IK problem
-        # solution 1
-        q2_1 = np.arccos((x**2 + y**2 - a1**2 - a2**2)/(2*a1*a2))
-        q1_1 = np.arctan2(y, x) - np.arctan2(a2*np.sin(q2_1), a1 + a2*np.cos(q2_1))
-        # solution 2
-        q2_2 = -q2_1
-        q1_2 = np.arctan2(y, x) + np.arctan2(a2*np.sin(q2_2), a1 + a2*np.cos(q2_2))
-
-        return [[q1_1, q2_1], [q1_2, q2_2]]
-
-    # get the reward for going from a start state to a goal state
-    def get_reward_for_state(self, env, start_state, goal_state):
-        joint_velocity = [0, 0]
-
-        jp_1, jp_2 = self.get_thetas_for_state(goal_state)
-
-        state1 = np.concatenate([
-            np.cos(jp_1),
-            np.sin(jp_1),
-            goal_state,
-            joint_velocity,
-            start_state - goal_state
-        ])
-
-        state2 = np.concatenate([
-            np.cos(jp_2),
-            np.sin(jp_2),
-            goal_state,
-            joint_velocity,
-            start_state - goal_state
-        ])
-
-        value1 = self.option.get_value(torch.Tensor(state1).float())
-        value2 = self.option.get_value(torch.Tensor(state2).float())
-
-        return max(value1, value2)
-
-    def make_option_reward_function(self, env):
-        rewards = []
-        for subgoal in self.subgoals:        
-            reward = {}
-            for start_state in self.start_states:
-                goal_state = subgoal.state
-                reward[tuple(start_state)] = self.get_reward_for_state(env, start_state, goal_state).item()
-            rewards.append(reward)
-        return rewards
-
-    def get_fsa_state(self, env, f, tm=None):
-        # if a tm is given, use that one. otherwise use the tm
-        # used during training
-        if tm is None:
-            tm = self.tm
-        props = env.get_current_propositions(threshold=0.02)
-        p = np.where(np.array(props) == 1)[0][0]
-        next_f = np.argmax(tm[f, :, p])        
-        return next_f
 
     def get_fsa_state_helper(self, env, state, f, tm=None):
         # if a tm is given, use that one. otherwise use the tm
@@ -833,7 +604,7 @@ class FlatQLearningContinuousMetaPolicy(MetaPolicyBase):
             return 0
         
         # Q: f x s x o
-        state = tuple(env.all_info['ee_p'])
+        state = self.get_closest_state(tuple(env.agent.get_joint_positions()), tuple(env.agent.get_tip().get_position()))
         if state not in self.start_states:
             self.start_states.append(state)
             self.option_rewards = self.make_option_reward_function(env)
@@ -845,7 +616,7 @@ class FlatQLearningContinuousMetaPolicy(MetaPolicyBase):
 
 # greedy class for metapolicies on continuous spaces
 class GreedyContinuousMetaPolicy(MetaPolicyBase):
-    def __init__(self, subgoals, task_spec, safety_props, safety_specs, env, option,
+    def __init__(self, subgoals, task_spec, safety_props, safety_specs, env, options,
                  num_episodes=1000, episode_length=100, gamma=1., alpha=0.5, epsilon=0.3,
                  record_training=False, recording_frequency=5, experiment_num=0, num_hq_iter=0):
         super().__init__(subgoals, task_spec, safety_props, safety_specs, env,
@@ -863,116 +634,18 @@ class GreedyContinuousMetaPolicy(MetaPolicyBase):
 
         # basically, a list of option starting states
         # aka the initial state and the goal states
-        self.start_states = [tuple(env.all_info['ee_p'])]
-        for subgoal in self.subgoals:
-            self.start_states.append(tuple(subgoal.state))
+        self.start_states = self.make_start_states(env)
 
         self.nF = task_spec.nF
-        self.option = option
-        # self.rewards[(start_state[x, y], subgoal_index)] = reward
-        # start states consist of initial state and goal states
-        # the reward function is a function over start states and the goal indices
-        # I chose to use goal indices rather than goal states because when the agent reaches a goal,
-        # it will not arrive at the exact goal state. So when I will need to replan after arriving at a goal,
-        # which will involve adding a new start state that is also technically a goal state.
-        # but I don't want to mess with the goal states, just the start states.
+        self.options = options
+
         self.option_rewards = self.make_option_reward_function(env)
-
-    # do inverse kinematics to get the joint angles
-    # of the 2-link reacher when the end effector
-    # is at a given goal
-    # note that the link lengths are assumed to be
-    # 0.1 and 0.1
-    # using equations from https://robotacademy.net.au/lesson/inverse-kinematics-for-a-2-joint-robot-arm-using-geometry/
-    def get_thetas_for_state(self, state):
-        x = state[0]
-        y = state[1]
-        a1 = 0.1
-        a2 = 0.1
-        # there are two possible solutions to the IK problem
-        # solution 1
-        q2_1 = np.arccos((x**2 + y**2 - a1**2 - a2**2)/(2*a1*a2))
-        q1_1 = np.arctan2(y, x) - np.arctan2(a2*np.sin(q2_1), a1 + a2*np.cos(q2_1))
-        # solution 2
-        q2_2 = -q2_1
-        q1_2 = np.arctan2(y, x) + np.arctan2(a2*np.sin(q2_2), a1 + a2*np.cos(q2_2))
-
-        return [[q1_1, q2_1], [q1_2, q2_2]]
-
-    # get the reward for going from a start state to a goal state
-    def get_reward_for_state(self, env, start_state, goal_state):
-        joint_velocity = [0, 0]
-
-        jp_1, jp_2 = self.get_thetas_for_state(goal_state)
-
-        state1 = np.concatenate([
-            np.cos(jp_1),
-            np.sin(jp_1),
-            goal_state,
-            joint_velocity,
-            start_state - goal_state
-        ])
-
-        state2 = np.concatenate([
-            np.cos(jp_2),
-            np.sin(jp_2),
-            goal_state,
-            joint_velocity,
-            start_state - goal_state
-        ])
-
-        value1 = self.option.get_value(torch.Tensor(state1).float())
-        value2 = self.option.get_value(torch.Tensor(state2).float())
-
-        return max(value1, value2)
-
-    def make_option_reward_function(self, env):
-        rewards = []
-        for subgoal in self.subgoals:        
-            reward = {}
-            for start_state in self.start_states:
-                goal_state = subgoal.state
-                reward[tuple(start_state)] = self.get_reward_for_state(env, start_state, goal_state).item()
-            rewards.append(reward)
-        return rewards
-
-    def is_terminated(self, env, state, option):
-        props = env.get_propositions(state)
-        if props[option] == 1 or props[option+5] == 1:
-            return True
-        else:
-            return False
-
-    def get_fsa_state(self, env, f, tm=None):
-        # if a tm is given, use that one. otherwise use the tm
-        # used during training
-        if tm is None:
-            tm = self.tm
-        props = env.get_current_propositions(threshold=0.02)
-        p = np.where(np.array(props) == 1)[0][0]
-        next_f = np.argmax(tm[f, :, p])        
-        return next_f
-
-    def make_reward_function(self, task_spec):
-        return task_spec.task_state_costs
-
-    def get_closest_state(self, state):
-        closest_state = None
-        closest_dist = np.inf
-        for s in self.start_states:
-            dist = np.linalg.norm(np.array(state) - np.array(s))
-            if dist < closest_dist and dist < 0.02:
-                closest_dist = dist
-                closest_state = s
-        if closest_state is None:
-            closest_state = state
-        return tuple(closest_state)
 
     def get_option(self, env, f, task_spec=None):
         if task_spec is None:
             task_spec = self.task_spec
         
-        state = self.get_closest_state(tuple(env.all_info['ee_p']))
+        state = self.get_closest_state(tuple(env.agent.get_joint_positions()), tuple(env.agent.get_tip().get_position()))
         tm = task_spec.tm[f]
 
         if state not in self.start_states:

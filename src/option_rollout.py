@@ -52,7 +52,7 @@ class Option(object):
 ###############
 # Load Option #
 ###############
-option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo', 'pyt_save', 'model7000.pt' )
+option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo2', 'pyt_save', 'model6500.pt' )
 
 pick_red_option = Option(option_load_path, pick_or_place='pick', target='red_target')
 place_red_option = Option(option_load_path, pick_or_place='place', target='red_goal')
@@ -105,7 +105,7 @@ options_dict = {
     'pick_red': pick_red_option,
     'place_red3': place_red_option
 }
-run_rollout(options_dict, env, 2)
+run_rollout(options_dict, env, 1)
 
 #### Test place option ####
 # run_rollout(place_option, env, 10)
