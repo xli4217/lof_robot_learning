@@ -211,17 +211,26 @@ class RobotEnv(gym.Env):
                 print("Released")
         r_action = - np.linalg.norm(action)
         
-        if dist > 0.2:
-            r_dist = -dist
-        else:
-            r_dist = 0.01/dist
+        # if dist > 0.2:
+        #     r_dist = -dist
+        # else:
+        #     r_dist = 0.01/dist
             
+        # reward = r_dist + r_action
+        # reward *= 0.2
+        # if dist < 0.01:
+        #     reward += 0.5
+        #     # done = True
+
+        if dist > 0.2:
+            r_dist = -2*dist
+        else:
+            r_dist = -dist
         reward = r_dist + r_action
         reward *= 0.2
-        if dist < 0.01:
-            reward += 0.5
-            # done = True
-
+        if dist < 0.02:
+            reward = 0 
+        
         self.current_step += 1
         if self.current_step >= self.episode_len:
             #print(f"episode time: {time.time()-self.t_start}")
