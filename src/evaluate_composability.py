@@ -8,6 +8,323 @@ import numpy as np
 from pathlib import Path
 import contextlib 
 
+
+# F ((a | b) & F c) & G ! o
+def make_taskspec_or():
+    # go to A, then B, then C, then HOME
+    spec = 'F((rt | gt) & F rg)'
+
+    # prop order:
+    # rt rg gt gg bt bg e
+
+    nF = 3
+    nP = 6
+    tm = np.zeros((nF, nF, nP))
+
+    # S0
+    #    rt rg gt bt  c  e
+    # 0   0  1  0  1  1  1
+    # 1   1  0  1  0  0  0
+    # G   0  0  0  0  0  0
+    tm[0, 1, 0] = 1
+    tm[0, 0, 1] = 1
+    tm[0, 1, 2] = 1
+    tm[0, 0, 3] = 1
+    tm[0, 0, 4] = 1
+    tm[0, 0, 5] = 1
+    # S1
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   1  0  1  1  1  1
+    # G   0  1  0  0  0  0
+    tm[1, 1, 0] = 1
+    tm[1, 2, 1] = 1
+    tm[1, 1, 2] = 1
+    tm[1, 1, 3] = 1
+    tm[1, 1, 4] = 1
+    tm[1, 1, 5] = 1
+    # G
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   0  0  0  0  0  0
+    # G   1  1  1  1  1  1
+    tm[2, 2, :] = 1
+
+    # remember that these are multiplicative
+    task_state_costs = [1, 1, 0]
+
+    safety_props = []
+    task_spec = TaskSpec(spec, tm, task_state_costs)
+
+    return task_spec, safety_props
+
+# F ((a | b) & F c) & G ! o
+def make_taskspec_if():
+    # go to A, then B, then C, then HOME
+    spec = '(F (rt & F rg) & G ! can) | (F rt & F can) & G ! o'
+
+    # prop order:
+    # rt rg gt gg bt bg e
+
+    nF = 4
+    nP = 6
+    tm = np.zeros((nF, nF, nP))
+
+    # S0
+    #    rt rg gt bt  c  e
+    # 0   0  1  1  1  0  1
+    # 1   1  0  0  0  0  0
+    # 2   0  0  0  0  1  0
+    # G   0  0  0  0  0  0
+    tm[0, 1, 0] = 1
+    tm[0, 0, 1] = 1
+    tm[0, 0, 2] = 1
+    tm[0, 0, 3] = 1
+    tm[0, 2, 4] = 1
+    tm[0, 0, 5] = 1
+    # S1
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   1  0  1  1  0  1
+    # 2   0  0  0  0  0  0
+    # G   0  1  0  0  1  0
+    tm[1, 1, 0] = 1
+    tm[1, 3, 1] = 1
+    tm[1, 1, 2] = 1
+    tm[1, 1, 3] = 1
+    tm[1, 3, 4] = 1
+    tm[1, 1, 5] = 1
+    # S2
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   0  0  0  0  0  0
+    # 2   1  0  1  1  1  1
+    # G   0  1  0  0  0  0
+    tm[2, 2, 0] = 1
+    tm[2, 3, 1] = 1
+    tm[2, 2, 2] = 1
+    tm[2, 2, 3] = 1
+    tm[2, 2, 4] = 1
+    tm[2, 2, 5] = 1
+    # S3
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   0  0  0  0  0  0
+    # 2   0  0  0  0  0  0
+    # G   0  1  0  0  0  0
+    tm[3, 3, :] = 1
+
+    # remember that these are multiplicative
+    task_state_costs = [1, 1, 1, 0]
+
+    safety_props = []
+    task_spec = TaskSpec(spec, tm, task_state_costs)
+
+    return task_spec, safety_props
+
+# F ((a | b) & F c) & G ! o
+def make_taskspec_sequential():
+    # go to A, then B, then C, then HOME
+    spec = 'F (rt & F (gt & F (bt & F (rg))))'
+
+    # prop order:
+    # rt rg gt gg bt bg c e
+
+    nF = 5
+    nP = 6
+    tm = np.zeros((nF, nF, nP))
+
+    # S0
+    #    rt rg gt bt  c  e
+    # 0   0  1  1  1  1  1
+    # 1   1  0  0  0  0  0
+    # 2   0  0  0  0  0  0
+    # 3   0  0  0  0  0  0
+    # G   0  0  0  0  0  0
+    tm[0, 1, 0] = 1
+    tm[0, 0, 1] = 1
+    tm[0, 0, 2] = 1
+    tm[0, 0, 3] = 1
+    tm[0, 0, 4] = 1
+    tm[0, 0, 5] = 1
+    # S1
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   1  1  0  1  1  1
+    # 2   0  0  1  0  0  0
+    # 3   0  0  0  0  0  0
+    # G   0  0  0  0  0  0
+    tm[1, 1, 0] = 1
+    tm[1, 1, 1] = 1
+    tm[1, 2, 2] = 1
+    tm[1, 1, 3] = 1
+    tm[1, 1, 4] = 1
+    tm[1, 1, 5] = 1
+    # S2
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   0  0  0  0  0  0
+    # 2   1  1  1  0  1  1
+    # 3   0  0  0  1  0  0
+    # G   0  0  0  0  0  0
+    tm[2, 2, 0] = 1
+    tm[2, 2, 1] = 1
+    tm[2, 2, 2] = 1
+    tm[2, 3, 3] = 1
+    tm[2, 2, 4] = 1
+    tm[2, 2, 5] = 1
+    # S3
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   0  0  0  0  0  0
+    # 2   0  0  0  0  0  0
+    # 3   1  0  1  1  1  1
+    # G   0  1  0  0  0  0
+    tm[3, 3, 0] = 1
+    tm[3, 4, 1] = 1
+    tm[3, 3, 2] = 1
+    tm[3, 3, 3] = 1
+    tm[3, 3, 4] = 1
+    tm[3, 3, 5] = 1
+    # G
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   0  0  0  0  0  0
+    # 2   0  0  0  0  0  0
+    # 3   0  0  0  0  0  0
+    # G   1  1  1  1  1  1
+    tm[4, 4, :] = 1
+
+    # remember that these are multiplicative
+    task_state_costs = [1, 1, 1, 1, 0]
+
+    safety_props = []
+    task_spec = TaskSpec(spec, tm, task_state_costs)
+
+    return task_spec, safety_props
+
+# F ((a | b) & F c) & G ! o
+def make_taskspec_composite():
+    # go to A, then B, then C, then HOME
+    spec = '(F ((rt | gt) & F (bt & F rg)) & G !can) | F((rt|gt) & F rg) & F can)'
+
+    # prop order:
+    # rt rg gt gg bt bg c e
+
+    nF = 7
+    nP = 6
+    tm = np.zeros((nF, nF, nP))
+
+    # S0
+    #    rt rg gt bt  c  e
+    # 0   0  1  0  1  0  1
+    # 1   1  0  1  0  0  0
+    # 2   0  0  0  0  1  0
+    # 3   0  0  0  0  0  0
+    # 4   0  0  0  0  0  0
+    # 5   0  0  0  0  0  0
+    # G   0  0  0  0  0  0
+    tm[0, 1, 0] = 1
+    tm[0, 0, 1] = 1
+    tm[0, 1, 2] = 1
+    tm[0, 0, 3] = 1
+    tm[0, 2, 4] = 1
+    tm[0, 0, 5] = 1
+    # S1
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   1  0  1  0  0  1
+    # 2   0  0  0  0  0  0
+    # 3   0  0  0  1  1  0
+    # 4   0  1  0  0  0  0
+    # 5   0  0  0  0  0  0
+    # G   0  0  0  0  0  0
+    tm[1, 1, 0] = 1
+    tm[1, 4, 1] = 1
+    tm[1, 1, 2] = 1
+    tm[1, 3, 3] = 1
+    tm[1, 3, 4] = 1
+    tm[1, 1, 5] = 1
+    # S2
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   0  0  0  0  0  0
+    # 2   0  1  0  1  1  1
+    # 3   1  0  1  0  0  0
+    # 4   0  0  0  0  0  0
+    # 5   0  0  0  0  0  0
+    # G   0  0  0  0  0  0
+    tm[2, 3, 0] = 1
+    tm[2, 2, 1] = 1
+    tm[2, 3, 2] = 1
+    tm[2, 2, 3] = 1
+    tm[2, 2, 4] = 1
+    tm[2, 2, 5] = 1
+    # S3
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   0  0  0  0  0  0
+    # 2   0  0  0  0  0  0
+    # 3   1  0  1  1  1  1
+    # 4   0  0  0  0  0  0
+    # 5   0  0  0  0  0  0
+    # G   0  1  0  0  0  0
+    tm[3, 3, 0] = 1
+    tm[3, 6, 1] = 1
+    tm[3, 3, 2] = 1
+    tm[3, 3, 3] = 1
+    tm[3, 3, 4] = 1
+    tm[3, 3, 5] = 1
+    # S4
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   0  0  0  0  0  0
+    # 2   0  0  0  0  0  0
+    # 3   0  0  0  0  0  0
+    # 4   1  1  1  0  0  1
+    # 5   0  0  0  1  0  0
+    # G   0  0  0  0  1  0
+    tm[4, 4, 0] = 1
+    tm[4, 4, 1] = 1
+    tm[4, 4, 2] = 1
+    tm[4, 5, 3] = 1
+    tm[4, 6, 4] = 1
+    tm[4, 4, 5] = 1
+    # S5
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   0  0  0  0  0  0
+    # 2   0  0  0  0  0  0
+    # 3   0  0  0  0  0  0
+    # 4   0  0  0  0  0  0
+    # 5   1  0  1  1  0  1
+    # G   0  1  0  0  1  0
+    tm[5, 5, 0] = 1
+    tm[5, 6, 1] = 1
+    tm[5, 5, 2] = 1
+    tm[5, 5, 3] = 1
+    tm[5, 6, 4] = 1
+    tm[5, 5, 5] = 1
+    # G
+    #    rt rg gt bt  c  e
+    # 0   0  0  0  0  0  0
+    # 1   0  0  0  0  0  0
+    # 2   0  0  0  0  0  0
+    # 3   0  0  0  0  0  0
+    # 4   0  0  0  0  0  0
+    # 5   0  0  0  0  0  0
+    # G   1  1  1  1  1  1
+    tm[6, 6, :] = 1
+
+    # remember that these are multiplicative
+    task_state_costs = [1, 1, 1, 1, 1, 1, 0]
+
+    safety_props = []
+    task_spec = TaskSpec(spec, tm, task_state_costs)
+
+    return task_spec, safety_props
+
+
 # F((rt | gt) & F(rg & F(bt & F rg))
 def make_taskspec_lunchbox():
     # go to A, then B, then C, then HOME
@@ -292,15 +609,15 @@ def save_dataset(exp_name, method_name, task_name, test_num, results):
     np.savez(path_name, results)
 
 def test_all_iters(metapolicy_class, metapolicy_name, task, task_name):
-    num_tests = 1
+    num_tests = 2
     for i in range(num_tests):
         results = test_iters(metapolicy_class, task, metapolicy_name, i)
         save_dataset('composability', metapolicy_name, task_name, i, results)
 
 def test_iters(metapolicy_class, task, metapolicy_name, test_num):
-    iters = [i for i in range(1, 101, 10)] # [1] + [i for i in range(10, 100, 10)]
+    iters = [i for i in range(1, 102, 1)] # [1] + [i for i in range(10, 100, 10)]
 
-    option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo', 'pyt_save', 'model7000.pt')
+    option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo2', 'pyt_save', 'model7500.pt')
 
     pick_red_option = Option(option_load_path, pick_or_place='pick', target='red_target')
     place_red_option = Option(option_load_path, pick_or_place='place', target='red_goal')
@@ -335,10 +652,12 @@ def run_rollout(task_spec, policies, metapolicy_class, iters, test_num):
     render_camera = False
     env = RobotEnv(headless=True, render_camera=render_camera, option_rollout=True, episode_len=300)
 
+    cancel = (test_num % 2) != 0
+
     for i in iters:
 
         task_done = False
-        obs = env.reset()
+        obs = env.reset(cancel=cancel)
         subgoals = env.subgoals
 
         metapolicy = metapolicy_class(subgoals, task_spec, safety_props, safety_specs, env, policies,
@@ -355,10 +674,11 @@ def run_rollout(task_spec, policies, metapolicy_class, iters, test_num):
         stop_high_level = False
         terminated = False
 
-        while not task_done and R > -200 and num_steps < 50:
+        while not success and R > -200 and num_steps < 50:
             print("EPISODE {} STEP {} REWARD {}##################".format(i, num_steps, R))
             num_steps += 1
             done = False
+            task_done = False
             if not stop_high_level:
                 env.soft_reset()
                 option = metapolicy.get_option(env, f)
@@ -367,7 +687,7 @@ def run_rollout(task_spec, policies, metapolicy_class, iters, test_num):
                 stop_high_level = True
             prev_option = option
             prev_f = f
-            while not done:
+            while not done and not task_done:
                 # env.render()
 
                 a = policies[option].get_action(env.all_info)
@@ -377,6 +697,8 @@ def run_rollout(task_spec, policies, metapolicy_class, iters, test_num):
                 prev_f = f
                 f = metapolicy.get_fsa_state(env, f, info, policies[option].get_target_name())
                 R += reward
+
+                task_done = info['task_done']
 
                 if f == goal_state:
                     success = True
@@ -405,16 +727,20 @@ def run_rollout(task_spec, policies, metapolicy_class, iters, test_num):
 # Run #        
 #######
 def run_all_tests():
-    task_spec_lunchbox, _ = make_taskspec_lunchbox()
-    task_spec_lunchbox2, _ = make_taskspec_lunchbox2()
-    task_spec_lunchbox3, _ = make_taskspec_lunchbox3()
+    # task_spec_lunchbox, _ = make_taskspec_lunchbox()
+    # task_spec_lunchbox2, _ = make_taskspec_lunchbox2()
+    # task_spec_lunchbox3, _ = make_taskspec_lunchbox3()
+    taskspec_if, _ = make_taskspec_if()
+    taskspec_or, _ = make_taskspec_or()
+    taskspec_sequential, _ = make_taskspec_sequential()
+    taskspec_composite, _ = make_taskspec_composite()
 
     # metapolicies = [ContinuousMetaPolicy, GreedyContinuousMetaPolicy, FSAQLearningContinuousMetaPolicy]
     # metapolicy_names = ['lof', 'greedy', 'fsa']
-    metapolicies = [ContinuousMetaPolicy, FSAQLearningContinuousMetaPolicy]
-    metapolicy_names = ['lof', 'fsa']
-    tasks = [task_spec_lunchbox, task_spec_lunchbox2, task_spec_lunchbox3]
-    task_names = ['lunchbox', 'lunchbox2', 'lunchbox3']
+    metapolicies = [ContinuousMetaPolicy, GreedyContinuousMetaPolicy, FSAQLearningContinuousMetaPolicy]
+    metapolicy_names = ['lof', 'greedy', 'fsa']
+    tasks = [taskspec_if, taskspec_or, taskspec_sequential, taskspec_composite]
+    task_names = ['if', 'or', 'sequential', 'composite']
     # metapolicies = [FSAQLearningContinuousMetaPolicy, FlatQLearningContinuousMetaPolicy]
     # metapolicy_names = ['fsa', 'flat']
     # metapolicies = [ContinuousMetaPolicy, GreedyContinuousMetaPolicy]

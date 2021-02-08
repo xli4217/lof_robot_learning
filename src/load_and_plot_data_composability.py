@@ -25,13 +25,14 @@ def load_dataset(exp_name, method_name, task_name, test_num):
     return data['arr_0'][()]
 
 task_reward_bounds = [(-300, 0), (-300, 0), (-300, 0)]
-task_names = ['lunchbox', 'lunchbox2', 'lunchbox3']
+task_names = ['or', 'if', 'sequential', 'composite']
+# task_names = ['lunchbox', 'lunchbox2', 'lunchbox3']
 method_names = ['lof', 'fsa', 'greedy']
 method_plot_names = ['LOF-VI', 'LOF-QL', 'Greedy']
 method_colors = ['b', 'r', 'g']
-# method_names = ['lof', 'fsa', 'greedy']
-# method_plot_names = ['LOF-VI', 'LOF-QL', 'Greedy']
-# method_colors = ['b', 'r', 'g']
+# method_names = ['greedy']
+# method_plot_names = ['Greedy']
+# method_colors = ['g']
 
 h_env_horizon = 50 # number of training steps per epoch
 h_epochs = [i for i in range(0, 900, 50)] + [899]
@@ -40,9 +41,9 @@ rm_epochs = [i for i in range(0, 990, 10)] + [999]
 rm_env_horizon = 800
 rm_steps = np.array(rm_epochs) * rm_env_horizon
 
-num_exp = 1 # number of separate training runs
+num_exp = 2 # number of separate training runs
 
-def get_plot_data_for_task(task_num, task_name, num_exp=1):
+def get_plot_data_for_task(task_num, task_name, num_exp=2):
     method_max_rewards = []
     method_min_rewards = []
     method_ave_rewards = []
@@ -153,7 +154,7 @@ def plot_data_over_tasks():
         plt.plot(steps, ave_reward, color=method_color, label=method_name)    
         plt.fill_between(steps, min_reward, max_reward, color=method_color, alpha=0.2)
 
-    plt.ylim(-300, 0)
+    plt.ylim(-30, -10)
     # plt.legend(loc='lower center', ncol=4, bbox_to_anchor=(0.5, -0.2))
     plt.tight_layout()
     # plt.title('Reward Averaged over Tasks')
@@ -187,7 +188,7 @@ def plot_data_per_task():
             plt.plot(steps, ave_reward, color=method_color, label=method_name)    
             plt.fill_between(steps, min_reward, max_reward, color=method_color, alpha=0.2)
 
-        plt.ylim(-300, 0)
+        plt.ylim(-40, -10)
         # plt.legend(loc='lower center', ncol=4, bbox_to_anchor=(0.5, -0.2))
         plt.tight_layout()
         # plt.title("Reward for {} task".format(task_name))

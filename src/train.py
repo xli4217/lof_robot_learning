@@ -65,7 +65,7 @@ ppo(env,
     max_ep_len=100,
     minibatch_size=256,
     log_gradients=False,
-    save_freq=500
+    save_freq=250
 )
 
 print('Done!')

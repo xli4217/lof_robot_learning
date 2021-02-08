@@ -9,6 +9,8 @@ from spinup.utils.mpi_pytorch import setup_pytorch_for_mpi, sync_params, mpi_avg
 from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_scalar, num_procs
 from torch.utils.tensorboard import SummaryWriter
 
+import pdb
+
 
 class PPOBuffer:
     """
@@ -350,6 +352,8 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
             try:
                 a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
             except:
+                pdb.set_trace()
+                print("step didn't work...")
                 print(o)
 
             next_o, r, d, _ = env.step(a)

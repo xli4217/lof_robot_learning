@@ -34,14 +34,14 @@ class Option(object):
 # Load Option #
 ###############
 
-option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo', 'pyt_save', 'model1500.pt')
+option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo', 'pyt_save', 'model7500.pt')
 option = Option(option_load_path)
 
 #################
 # Construct Env #
 #################
 render_camera = False
-env = RobotEnv(headless=True, render_camera=render_camera)
+env = RobotEnv(headless=False, render_camera=render_camera)
 
 ###############
 # Run Rollout #

@@ -4,55 +4,55 @@ import torch
 import gym
 import time 
 import numpy as np
-
+from option import Option
 ##########
 # Option #
 ##########
-class Option(object):
-    def __init__(self, load_path:str, pick_or_place='pick', target='red_target'):
-        self.ac = torch.load(load_path)
-        print(self.ac)
-        print(type(self.ac))
+# class Option(object):
+#     def __init__(self, load_path:str, pick_or_place='pick', target='red_target'):
+#         self.ac = torch.load(load_path)
+#         print(self.ac)
+#         print(type(self.ac))
 
-        self.target_name = target
-        self.pick_or_place = pick_or_place
+#         self.target_name = target
+#         self.pick_or_place = pick_or_place
         
-    def get_action(self, env_info: dict):
-        state = np.concatenate([
-            env_info['agent_joint_positions'],
-            env_info['agent_joint_velocities'],
-            env_info[self.target_name]['pos']
-        ])
+#     def get_action(self, env_info: dict):
+#         state = np.concatenate([
+#             env_info['agent_joint_positions'],
+#             env_info['agent_joint_velocities'],
+#             env_info[self.target_name]['pos']
+#         ])
         
-        a = self.ac.pi.mu_net(torch.from_numpy(state).float()).detach().numpy()
-        if self.pick_or_place == 'pick':
-            a = np.concatenate([np.array([0]), a])
-        elif self.pick_or_place == 'place':
-            a = np.concatenate([np.array([1]), a])
-        else:
-            raise ValueError('mode not supported')
+#         a = self.ac.pi.mu_net(torch.from_numpy(state).float()).detach().numpy()
+#         if self.pick_or_place == 'pick':
+#             a = np.concatenate([np.array([0]), a])
+#         elif self.pick_or_place == 'place':
+#             a = np.concatenate([np.array([1]), a])
+#         else:
+#             raise ValueError('mode not supported')
 
-        return a
+#         return a
         
-    # state is 11 dimensional
-    # [j0 j1 j2 j3 vj0 vj1 vj2 vj3 x y z]
-    def get_value(self, state: torch.Tensor):
-        return self.ac.v(state)
+#     # state is 11 dimensional
+#     # [j0 j1 j2 j3 vj0 vj1 vj2 vj3 x y z]
+#     def get_value(self, state: torch.Tensor):
+#         return self.ac.v(state)
 
-    def get_target_name(self):
-        return self.target_name
+#     def get_target_name(self):
+#         return self.target_name
         
-    def is_terminated(self, state):
-        return False
+#     def is_terminated(self, state):
+#         return False
 
-    def environment_info(self):
-        pass
+#     def environment_info(self):
+#         pass
 
         
 ###############
 # Load Option #
 ###############
-option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo2', 'pyt_save', 'model6500.pt' )
+option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo2', 'pyt_save', 'model6000.pt' )
 
 pick_red_option = Option(option_load_path, pick_or_place='pick', target='red_target')
 place_red_option = Option(option_load_path, pick_or_place='place', target='red_goal')

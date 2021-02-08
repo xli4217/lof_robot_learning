@@ -15,25 +15,25 @@ def load_dataset(exp_name, method_name, task_name, epoch):
 
 # task_reward_bounds = [(-100, -26), (-100, -62), (-100, -21), (-100, -19)]
 # task_names = ['composite', 'sequential', 'OR', 'IF']
-# method_names = ['lof', 'fsa', 'greedy', 'flat']
-# method_plot_names = ['LOF-VI', 'LOF-QL', 'Greedy', 'Flat Options']
-# method_colors = ['b', 'r', 'g', 'y']
+method_names = ['lof', 'fsa', 'greedy', 'flat']
+method_plot_names = ['LOF-VI', 'LOF-QL', 'Greedy', 'Flat Options']
+method_colors = ['b', 'r', 'g', 'y']
 task_reward_bounds = [(-300, 0)]
-task_names = ['lunchbox']
-method_names = ['greedy']
-method_plot_names = ['Greedy']
-method_colors = ['b', 'g']
+task_names = ['or', 'if', 'sequential', 'composite']
+# method_names = ['lof']
+# method_plot_names = ['LOF-VI']
+# method_colors = ['b']
 
 h_env_horizon = 1000 # number of training steps per epoch
-h_epochs = [0] + [i for i in range(250, 7501, 500)] # + [7500]
+h_epochs = [i for i in range(0, 7501, 250)]
 h_steps = np.array(h_epochs) * h_env_horizon
 # rm_epochs = [i for i in range(0, 990, 10)] + [999]
 # rm_env_horizon = 800
 # rm_steps = np.array(rm_epochs) * rm_env_horizon
 
-num_exp = 1 # number of separate training runs
+num_exp = 2 # number of separate training runs
 
-def get_plot_data_for_task(task_num, task_name, num_exp=1):
+def get_plot_data_for_task(task_num, task_name, num_exp=2):
     method_max_rewards = []
     method_min_rewards = []
     method_ave_rewards = []
@@ -156,7 +156,7 @@ def plot_data_over_tasks():
         plt.xlim((0, rm_steps[-1]))
         plt.ylim(-200, 0)
     else:
-        plt.ylim(-300, 30)
+        plt.ylim(-210, 30)
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
     plt.xticks(fontsize=17)
     plt.yticks(fontsize=17)
@@ -206,7 +206,7 @@ def plot_data_per_task():
             plt.xlim((0, rm_steps[-1]))
             plt.ylim(-200, 0)
         else:
-            plt.ylim(-300, 30)
+            plt.ylim(-210, 30)
         plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
         plt.xticks(fontsize=17)
         plt.yticks(fontsize=17)

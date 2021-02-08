@@ -31,6 +31,8 @@ import torch
 import time
 import pdb
 
+from qrm.src.reward_machines.reward_machine import RewardMachine
+
 from pyrep.const import RenderMode
 from pyrep.objects.dummy import Dummy
 from pyrep.objects.vision_sensor import VisionSensor
@@ -47,11 +49,11 @@ sample_region_pos = np.array([0.892,0, 0.961])
 POS_MIN, POS_MAX = list(sample_region_pos - sample_region_dim/2), list(sample_region_pos + sample_region_dim/2) 
 
 
-class RobotEnv(gym.Env):
+class RMRobotEnv(gym.Env):
 
     metadata = {'render.modes': ['human', 'rgb_array']}
 
-    def __init__(self, headless=True, render_camera=False, option_rollout=False, episode_len=100):
+    def __init__(self, nF=0, task_name='', can_chance=0.5, eval=False, headless=True, render_camera=False, option_rollout=False, episode_len=100):
         self.pr = PyRep()
         self.pr.launch(SCENE_FILE, headless=headless)
         self.pr.start()
@@ -87,7 +89,7 @@ class RobotEnv(gym.Env):
         action_low = np.array(action_dim * [-1.])
 
         self.action_space = gym.spaces.Box(low=action_low, high=action_high, dtype=np.float32)
-        self.observation_space = gym.spaces.Box(low=np.array(11*[-10.]), high=np.array(11*[10.]), dtype=np.float32)
+        self.observation_space = gym.spaces.Box(low=np.array(21*[-10.]), high=np.array(21*[10.]), dtype=np.float32)
         self.current_step = 0
 
         self.render_camera = render_camera
@@ -111,7 +113,16 @@ class RobotEnv(gym.Env):
 
         self.subgoals = None
         self.can_state = 1
-        self.cancel = False
+        self.cancel = np.random.uniform() < can_chance
+
+        self.eval = eval
+        self.nF = nF
+        self.f = 0
+        # initialize RM
+        self.task_name = task_name
+        rm_file = os.path.join(os.environ['PKG_PATH'], 'libs', 'qrm', 'rm', 'tasks', task_name + '.txt')
+
+        self.rm = RewardMachine(rm_file, use_rs=False, gamma=0.9)
 
     def make_subgoals(self):
         # name, prop_index, subgoal_index, state
@@ -121,10 +132,6 @@ class RobotEnv(gym.Env):
                 'red_goal': [-0.6136815547943115, 0.4038100242614746, -0.12854143977165222, -1.657426357269287, -0.0010327049531042576, 1.2176005840301514, 0.7865227460861206],
                 'green_target': [-0.34819626808166504, 0.8475337028503418, 0.023823529481887817, -1.4239075183868408, -0.001070136670023203, 1.2176568508148193, 0.7865363359451294],
                 'blue_target': [-0.47508692741394043, 0.28998875617980957, 0.03704550862312317, -1.6011130809783936, -0.0010186382569372654, 1.2176315784454346, 0.7865163087844849]
-                # 'green_target': [-0.04999828338623047, 0.42098501324653625, 0.5913615226745605, -1.6058857440948486, -0.000500077847391367, 1.218733549118042, 0.7857886552810669],
-                # 'blue_target': [-0.10592365264892578, 0.2675664722919464, -0.23654529452323914, -1.800999402999878, 0.002284651156514883, 1.2168364524841309, 0.7836672067642212],
-                # 'red_target': [0.08351826667785645, 0.16150668263435364, -0.11060187220573425, -1.972297191619873, 0.0022682002745568752, 1.2168371677398682, 0.7836600542068481],
-                # 'red_goal': [-0.08144235610961914, 0.3910515606403351, -0.6666841506958008, -1.668611764907837, 0.0023123077116906643, 1.216784954071045, 0.783650279045105]
             }
         red_target = Subgoal('red_target', 0, 0, all_info['red_target']['pos'], states['red_target'])
         red_goal = Subgoal('red_goal', 1, 1, all_info['red_goal']['pos'], states['red_goal'])
@@ -144,14 +151,6 @@ class RobotEnv(gym.Env):
                 'obj': self.red_goal,
                 'pos': np.array(self.red_goal.get_position()),
             },
-            # 'green_goal': {
-            #     'obj': self.green_goal,
-            #     'pos': np.array(self.green_goal.get_position()),
-            # },
-            # 'blue_goal': {
-            #     'obj': self.blue_goal,
-            #     'pos': np.array(self.blue_goal.get_position()),
-            # },
             'red_target': {
                 'obj': self.red_target,
                 'pos': np.array(self.red_target.get_position()),
@@ -173,15 +172,10 @@ class RobotEnv(gym.Env):
         # Return state containing arm joint angles/velocities & target position        
         return np.concatenate([self.agent.get_joint_positions()[:4],
                                self.agent.get_joint_velocities()[:4],
-                               self.target.get_position()])
-
-        # jp = np.array(self.agent.get_joint_positions())
-        # jv = np.array(self.agent.get_joint_velocities())
-        # ee_p = np.array(self.agent_ee_tip.get_position())
-        # target_pos = np.array(self.target.get_position())
-
-        # state = np.concatenate([np.cos(jp), np.sin(jp), target_pos, jv, ee_p-target_pos])
-
+                               self.red_target.get_position(),
+                               self.red_goal.get_position(),
+                               self.green_target.get_position(),
+                               self.blue_target.get_position()])
         return state
 
     # this is for when you're running multiple options in a row
@@ -273,14 +267,16 @@ class RobotEnv(gym.Env):
 
         if self.option_rollout:
             for target in ['red_target', 'green_target', 'blue_target']:
-                # p = list(np.random.uniform(POS_MIN, POS_MAX))
-                if target == 'red_target':
-                    #       y  x    z
-                    p = [1, 0.25, 1]
-                elif target == 'green_target':
-                    p = [1, -0.15, 0.9]
-                elif target == 'blue_target':
-                    p = [1, -0.15, 1.1]
+                if not self.eval:
+                    p = list(np.random.uniform(POS_MIN, POS_MAX))
+                else:
+                    if target == 'red_target':
+                        #       y  x    z
+                        p = [1, 0.25, 1]
+                    elif target == 'green_target':
+                        p = [1, -0.15, 0.9]
+                    elif target == 'blue_target':
+                        p = [1, -0.15, 1.1]
                 self.all_info[target]['obj'].set_position(p)
         
         self.agent.set_joint_positions(self.initial_joint_positions)
@@ -289,6 +285,12 @@ class RobotEnv(gym.Env):
         self.update_all_info()
         self.subgoals = self.make_subgoals()
         obs = self._get_state()
+        if not self.eval:
+            self.f = np.random.randint(self.nF - 1)
+            print("Init FSA state: ", self.f)
+        else:
+            self.f = 0
+        obs = np.concatenate([np.array([self.f]), obs])
         return obs
 
     def step(self, action, obj_name=None):
@@ -337,30 +339,53 @@ class RobotEnv(gym.Env):
                 print("Released")
         r_action = - np.linalg.norm(action)
         
-        # if dist > 0.2:
-        #     r_dist = -dist
-        # else:
-        #     r_dist = 0.01/dist
+        ########## RM Stuff
+        tip = self.agent.get_tip().get_position()
+        dist_red = np.linalg.norm(tip - self.all_info['red_target']['pos'])
+        dist_rg = np.linalg.norm(tip - self.all_info['red_goal']['pos'])
+        dist_green = np.linalg.norm(tip - self.all_info['green_target']['pos'])
+        dist_blue = np.linalg.norm(tip - self.all_info['blue_target']['pos'])
+
+        true_props = []
+        if dist_red < 0.1 and info['grasped'] == True:
+            true_props = ['r']
+        elif dist_rg < 0.1 and info['released'] == True:
+            true_props = ['y']
+        elif dist_green < 0.1 and info['released'] == True:
+            true_props = ['g']
+        elif dist_blue < 0.1 and info['released'] == True:
+            true_props = ['b']
+        elif self.f == self.can_state and self.cancel:
+            true_props = ['c']
+        if true_props != []:
+            print("PROP: ", true_props)
             
-        # reward = r_dist + r_action
-        # reward *= 0.2
-        # if dist < 0.01:
-        #     reward += 0.5
-        #     # done = True
+        next_f = self.rm.get_next_state(self.f, true_props)
+        print(next_f)
 
-        eval = True
+        if next_f != self.f:
+            print("FSA STATE CHANGED FROM {} TO {}".format(self.f, next_f))
 
-        if eval:
-            reward = 0.2*(-0.1 + r_action)
+        if next_f != self.nF - 1:
+            reward = - np.square(action).sum() - 0.1
         else:
-            if dist > 0.2:
-                r_dist = -2*dist
-            else:
-                r_dist = -dist
-            reward = r_dist + r_action
-            reward *= 0.2
-            if dist < 0.02:
-                reward = 0 
+            reward = 1
+
+        self.f = next_f
+
+        ###############
+
+        if self.eval:
+            reward = 0.2*(-0.1 + r_action)
+        # else:
+        #     if dist > 0.2:
+        #         r_dist = -2*dist
+        #     else:
+        #         r_dist = -dist
+        #     reward = r_dist + r_action
+        #     reward *= 0.2
+        #     if dist < 0.02:
+        #         reward = 0 
 
         self.current_step += 1
         if self.current_step >= self.episode_len:
@@ -369,7 +394,10 @@ class RobotEnv(gym.Env):
 
         info['task_done'] = task_done
 
-        return self._get_state(), reward, done, info
+        obs = np.concatenate([np.array([self.f]), self._get_state()])
+
+
+        return obs, reward, done, info
 
     def gripper_actuate(self, amount, velocity):
         pass
@@ -382,66 +410,11 @@ class RobotEnv(gym.Env):
 
 if __name__ == "__main__":
         
-    # class Agent(object):
-        
-    #     def act(self, state):
-    #         del state
-    #         return list(np.random.uniform(-1.0, 1.0, size=(7,)))
-
-    #     def learn(self, replay_buffer):
-    #         del replay_buffer
-    #         pass
-
-        
-    env = RobotEnv(headless=True, render_camera=True)
+    env = RMRobotEnv('OR', headless=True, render_camera=True)
     env.reset()
     for _ in range(100):
         time.sleep(10)
         env.render()
-    
-    # agent = Agent()
-    # replay_buffer = []
-
-
-    # p1 = np.array([1.06900001, 0.01499999, 1.31599903])
-    # p2 = np.array([1.1, 0.1, 1.2])
-
-    # import math
-    # ik1 = env.agent.solve_ik(position=p1, euler=[0, math.radians(180), 0])
-    # ik2 = env.agent.solve_ik(position=p2, euler=[0, math.radians(180), 0])
-    # print(f"ik1: {ik1}")
-    # print(f"ik2: {ik2}")
-    
-    # import math
-    # path = env.agent.get_path(position=[0.98,0.14,1.19], euler=[0, math.radians(180), 0])
-    # print(path)
-    
-    # p = env.target.get_position(env.agent_ee_tip)
-    # o = env.target.get_quaternion(env.agent_ee_tip)
-    # print(p, o)
-    # print(env.agent.get_configs_for_tip_pose(position=p, quaternion=o, relative_to=env.agent_ee_tip))
-    
-    # for _ in range(500):
-    #     # env.gripper.grasp(env.target)
-    #     while not env.gripper.actuate(amount=0.5, velocity=0.01):
-    #        env.pr.step()
-    #     #env.gripper.actuate(amount=0.5, velocity=0.01)
-    #     action = np.array(4*[0])
-    #     #action[0] = 1.
-    #     reward, next_state, _, _ = env.step(action)
-   
-    
-    # EPISODES = 2
-    # for e in range(EPISODES):
-    #     print('Starting episode %d' % e)
-    #     state = env.reset()
-    #     for i in range(EPISODE_LENGTH):
-    #         #action = agent.act(state)
-    #         action = np.array(4*[0])
-    #         reward, next_state, _, _ = env.step(action)
-    #         replay_buffer.append((state, action, reward, next_state))
-    #         state = next_state
-    #         agent.learn(replay_buffer)
 
     print('Done!')
     env.shutdown()

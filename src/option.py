@@ -1,6 +1,7 @@
 import torch
 import os
 import numpy as np
+import pdb
 
 # changed state_index to just state
 class Subgoal(object):
@@ -44,7 +45,8 @@ class Option(object):
             env_info[self.target_name]['pos']
         ])
         
-        a = self.ac.pi.mu_net(torch.from_numpy(state).float()).detach().numpy()
+        a = self.ac.pi.mu_net(torch.from_numpy(state).float()).detach().numpy() + 0.01*torch.normal(mean=torch.Tensor([0, 0, 0, 0])).detach().numpy()
+        # a = self.ac.act(torch.from_numpy(state).float())
         if self.pick_or_place == 'pick':
             a = np.concatenate([np.array([0]), a])
         elif self.pick_or_place == 'place':
@@ -108,10 +110,10 @@ class MetaPolicyBase(object):
         start_vel = (0, 0, 0, 0)
 
         states = {
-            'red_target': [0.1061546802520752, 0.6898090839385986, 0.25773075222969055, -1.8561604022979736, -0.0020071216858923435, 1.217017412185669, 0.7869886159896851],
-                'red_goal': [-0.33927488327026367, 0.4343113899230957, -0.23959800601005554, -1.62320876121521, -0.0019444175995886326, 1.2168865203857422, 0.786967396736145],
-                'green_target': [-0.2507748603820801, 0.617473840713501, -0.10747954249382019, -1.568331241607666, -0.0018800445832312107, 1.2168655395507812, 0.7869387865066528],
-                'blue_target': [-0.24648523330688477, 0.3789811134338379, -0.1470303237438202, -1.6356382369995117, -0.0019618221558630466, 1.2168805599212646, 0.7869573831558228]
+            'red_target': [-0.024184703826904297, 0.5780532360076904, 0.49106720089912415, -1.7368626594543457, -0.0010691829957067966, 1.2176384925842285, 0.7865573167800903],
+                'red_goal': [-0.6136815547943115, 0.4038100242614746, -0.12854143977165222, -1.657426357269287, -0.0010327049531042576, 1.2176005840301514, 0.7865227460861206],
+                'green_target': [-0.34819626808166504, 0.8475337028503418, 0.023823529481887817, -1.4239075183868408, -0.001070136670023203, 1.2176568508148193, 0.7865363359451294],
+                'blue_target': [-0.47508692741394043, 0.28998875617980957, 0.03704550862312317, -1.6011130809783936, -0.0010186382569372654, 1.2176315784454346, 0.7865163087844849]
         }
 
         for name, data in info.items():
@@ -170,7 +172,7 @@ class MetaPolicyBase(object):
         # used during training
         if tm is None:
             tm = self.tm
-        props = env.get_current_propositions(info, obj_name, threshold=0.02)
+        props = env.get_current_propositions(info, obj_name, threshold=0.06, f=f)
         p = np.where(np.array(props) == 1)[0][0]
         next_f = np.argmax(tm[f, :, p])  
         # print(props, next_f)
