@@ -251,6 +251,7 @@ class RMRobotEnv(gym.Env):
         return props
         
     def reset(self, cancel=False):
+        print("RESETINGGGGGGGGGGGGGGGGGGGGGGGGGG")
         self.cancel = cancel
         # Get a random position within a cuboid and set the target position
         self.t_start = time.time()
@@ -290,6 +291,7 @@ class RMRobotEnv(gym.Env):
             print("Init FSA state: ", self.f)
         else:
             self.f = 0
+        print("TIP POSITION: ", self.agent.get_tip().get_position(), self.all_info['agent_joint_positions'])
         obs = np.concatenate([np.array([self.f]), obs])
         return obs
 
@@ -347,13 +349,13 @@ class RMRobotEnv(gym.Env):
         dist_blue = np.linalg.norm(tip - self.all_info['blue_target']['pos'])
 
         true_props = []
-        if dist_red < 0.1 and info['grasped'] == True:
+        if dist_red < 0.02:
             true_props = ['r']
-        elif dist_rg < 0.1 and info['released'] == True:
+        elif dist_rg < 0.02:
             true_props = ['y']
-        elif dist_green < 0.1 and info['released'] == True:
+        elif dist_green < 0.02:
             true_props = ['g']
-        elif dist_blue < 0.1 and info['released'] == True:
+        elif dist_blue < 0.02:
             true_props = ['b']
         elif self.f == self.can_state and self.cancel:
             true_props = ['c']
@@ -361,15 +363,20 @@ class RMRobotEnv(gym.Env):
             print("PROP: ", true_props)
             
         next_f = self.rm.get_next_state(self.f, true_props)
-        print(next_f)
+        # print(next_f)
 
+        reward = 0
         if next_f != self.f:
+            reward += 1
             print("FSA STATE CHANGED FROM {} TO {}".format(self.f, next_f))
 
         if next_f != self.nF - 1:
-            reward = - np.square(action).sum() - 0.1
+            reward += -0.1 # - np.square(action).sum() - 0.1
         else:
-            reward = 1
+            print("goal state")
+            reward += 1
+            done = True
+            info['task_done'] = True
 
         self.f = next_f
 
@@ -392,7 +399,7 @@ class RMRobotEnv(gym.Env):
             #print(f"episode time: {time.time()-self.t_start}")
             done = True
 
-        info['task_done'] = task_done
+        # info['task_done'] = task_done
 
         obs = np.concatenate([np.array([self.f]), self._get_state()])
 

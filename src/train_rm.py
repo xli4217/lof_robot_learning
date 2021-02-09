@@ -11,7 +11,7 @@ import time
 from rm_robot_env import RMRobotEnv
 import argparse
 
-import rlbench.gym
+# import rlbench.gym
 from spinup.algos.pytorch.ppo.ppo import ppo
 
 # env = ReacherGymEnv({'headless': True, 'horizon': 100})
@@ -41,28 +41,33 @@ ac_kwargs = {
 nFs = [3]
 task_names = ['OR']
 for nF, task_name in zip(nFs, task_names):
+    # load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'rm', task_name, 'pyt_save', 'model2000.pt')
+    # reload_ac = torch.load(load_path)
+
     logger_kwargs = {
         "output_dir": os.path.join(os.environ['PKG_PATH'], 'experiments', 'rm', task_name),
         "exp_name": "rm"
     }
 
-    env = lambda : RMRobotEnv(nF=nF, task_name=task_name)
+    env = lambda : RMRobotEnv(nF=nF, task_name=task_name, headless=True, episode_len=500)
 
     ppo(env,
         logger_kwargs=logger_kwargs,
         ac_kwargs=ac_kwargs,
         clip_ratio=0.2,
-        epochs=5000,
+        epochs=10000,
         pi_lr=3e-4,
         vf_lr=3e-4,
         lam=0.99,
         gamma=0.995,
-        steps_per_epoch=3000,
+        steps_per_epoch=1000,
         train_pi_iters=2,
         train_v_iters=5,
         target_kl=0.02,
-        max_ep_len=1000,
+        max_ep_len=500,
         minibatch_size=256,
         log_gradients=False,
-        save_freq=250
+        save_freq=250,
+        # reload_ac=reload_ac,
+        # start_epoch=2000
     )

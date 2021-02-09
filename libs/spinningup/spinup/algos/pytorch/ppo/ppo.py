@@ -91,7 +91,8 @@ class PPOBuffer:
 def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0, 
         steps_per_epoch=4000, epochs=50, gamma=0.99, clip_ratio=0.2, pi_lr=3e-4,
         vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97, max_ep_len=1000,
-        target_kl=0.01, logger_kwargs=dict(), save_freq=10, minibatch_size=64, log_gradients=False):
+        target_kl=0.01, logger_kwargs=dict(), save_freq=10, minibatch_size=64, log_gradients=False,
+        reload_ac=None,start_epoch=0):
     """
     Proximal Policy Optimization (by clipping), 
 
@@ -236,7 +237,10 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     act_dim = env.action_space.shape
 
     # Create actor-critic module
-    ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
+    if reload_ac is None:
+        ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
+    else:
+        ac = reload_ac
 
     # Sync params across processes
     sync_params(ac)
@@ -347,7 +351,7 @@ def ppo(env_fn, actor_critic=core.MLPActorCritic, ac_kwargs=dict(), seed=0,
     EP_RET, EP_LEN = [], []
     # Main loop: collect experience in env and update/log each epoch
     global_step = 0
-    for epoch in range(epochs):
+    for epoch in range(start_epoch, epochs):
         for t in range(local_steps_per_epoch):
             try:
                 a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32))
