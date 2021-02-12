@@ -15,9 +15,9 @@ def load_dataset(exp_name, method_name, task_name, epoch):
 
 # task_reward_bounds = [(-100, -26), (-100, -62), (-100, -21), (-100, -19)]
 # task_names = ['composite', 'sequential', 'OR', 'IF']
-method_names = ['lof', 'fsa', 'greedy', 'flat']
-method_plot_names = ['LOF-VI', 'LOF-QL', 'Greedy', 'Flat Options']
-method_colors = ['b', 'r', 'g', 'y']
+method_names = ['lof', 'fsa', 'greedy', 'flat', 'RM']
+method_plot_names = ['LOF-VI', 'LOF-QL', 'Greedy', 'Flat Options', 'Reward Machines']
+method_colors = ['b', 'r', 'g', 'y', 'c']
 task_reward_bounds = [(-300, 0)]
 task_names = ['or', 'if', 'sequential', 'composite']
 # method_names = ['lof']
@@ -27,9 +27,9 @@ task_names = ['or', 'if', 'sequential', 'composite']
 h_env_horizon = 1000 # number of training steps per epoch
 h_epochs = [i for i in range(0, 7501, 250)]
 h_steps = np.array(h_epochs) * h_env_horizon
-# rm_epochs = [i for i in range(0, 990, 10)] + [999]
-# rm_env_horizon = 800
-# rm_steps = np.array(rm_epochs) * rm_env_horizon
+rm_epochs = [i for i in range(0, 10001, 250)]
+rm_env_horizon = 1000
+rm_steps = np.array(rm_epochs) * rm_env_horizon
 
 num_exp = 2 # number of separate training runs
 
@@ -135,6 +135,7 @@ def plot_data_over_tasks():
     for i, (method_name, method_color, ave_reward, min_reward, max_reward) in enumerate(zip(
             method_plot_names, method_colors, method_ave_rewards, method_min_rewards, method_max_rewards)):
         if 'RM' in method_names:
+            print(method_name)
             if method_name == 'Reward Machines':
                 steps = rm_steps
             else:
@@ -154,7 +155,7 @@ def plot_data_over_tasks():
     plt.ylabel('Average reward', fontsize=21)
     if 'RM' in method_names:
         plt.xlim((0, rm_steps[-1]))
-        plt.ylim(-200, 0)
+        plt.ylim(-250, 30)
     else:
         plt.ylim(-210, 30)
     plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))
@@ -204,7 +205,7 @@ def plot_data_per_task():
         plt.ylabel('Average reward', fontsize=21)
         if 'RM' in method_names:
             plt.xlim((0, rm_steps[-1]))
-            plt.ylim(-200, 0)
+            plt.ylim(-250, 30)
         else:
             plt.ylim(-210, 30)
         plt.ticklabel_format(axis="x", style="sci", scilimits=(0,0))

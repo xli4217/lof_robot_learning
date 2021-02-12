@@ -49,7 +49,7 @@ for nF, task_name in zip(nFs, task_names):
         "exp_name": "rm"
     }
 
-    env = lambda : RMRobotEnv(nF=nF, task_name=task_name, headless=True, episode_len=500)
+    env = lambda : RMRobotEnv(nF=nF, task_name=task_name, headless=False, episode_len=500)
 
     ppo(env,
         logger_kwargs=logger_kwargs,

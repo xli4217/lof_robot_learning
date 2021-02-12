@@ -25,6 +25,27 @@ class TaskSpec(object):
         self.nF = tm.shape[0]
         self.task_state_costs = task_state_costs
 
+class RMPolicy(object):
+    def __init__(self, load_path:str):
+        self.ac = torch.load(load_path)
+
+    def get_action(self, obs):
+        a = self.ac.pi.mu_net(obs).detach().numpy() + 0.01*torch.normal(mean=torch.Tensor([0, 0, 0, 0])).detach().numpy()
+
+        return a
+        
+    def get_value(self, state: torch.Tensor):
+        return self.ac.v(state)
+
+    def get_target_name(self):
+        return self.target_name
+        
+    def is_terminated(self, state):
+        return False
+
+    def environment_info(self):
+        pass
+
 
 ##########
 # Option #
@@ -172,7 +193,7 @@ class MetaPolicyBase(object):
         # used during training
         if tm is None:
             tm = self.tm
-        props = env.get_current_propositions(info, obj_name, threshold=0.06, f=f)
+        props = env.get_current_propositions(info, obj_name, threshold=0.03, f=f)
         p = np.where(np.array(props) == 1)[0][0]
         next_f = np.argmax(tm[f, :, p])  
         # print(props, next_f)

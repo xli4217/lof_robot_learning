@@ -8,6 +8,12 @@ import numpy as np
 from pathlib import Path
 import contextlib 
 import pdb
+from pyrep.objects.vision_sensor import VisionSensor
+
+# import numpy as np
+# from cv2 import VideoWriter, VideoWriter_fourcc, VideoCapture
+import matplotlib.pyplot as plt
+from celluloid import Camera
 
 # F ((a | b) & F c) & G ! o
 def make_taskspec_or():
@@ -369,7 +375,7 @@ def test_epoch(epoch, metapolicy_class, task, metapolicy_name, num_tests=10):
 ###############
 # Run Rollout #
 ###############
-def run_rollout(task_spec, policies, num_episodes, metapolicy_class, cancel=False):
+def run_rollout(task_spec, policies, num_episodes, metapolicy_class, headless=True, record=False):
     _, safety_props = make_taskspec_if()
     safety_specs = make_safetyspecs_reacher()
 
@@ -381,14 +387,30 @@ def run_rollout(task_spec, policies, num_episodes, metapolicy_class, cancel=Fals
     successes = []
 
     render_camera = False
-    env = RobotEnv(headless=True, render_camera=render_camera, option_rollout=True, episode_len=300)
+    env = RobotEnv(headless=headless, render_camera=render_camera, option_rollout=True, episode_len=300)
 
+
+    if record:
+        fig = plt.figure()
+        frame1 = plt.gca()
+        frame1.axes.get_xaxis().set_visible(False)
+        frame1.axes.get_yaxis().set_visible(False)
+        frame1.axes.xaxis.set_ticklabels([])
+        frame1.axes.yaxis.set_ticklabels([])
+        camera = Camera(fig)
+
+        # width = 1280
+        # height = 720
+        # fps = 24
+        # fourcc = VideoWriter_fourcc(*'MP4V')
+        # video = VideoWriter('./my_vid.mp4', fourcc, float(fps), (width, height))
+        cam = VisionSensor('Vision_sensor')
 
     for i in range(num_episodes):
         print('-------------------------------------------------------')
         # env = Monitor(env, './video', video_callable=lambda episode_id: True, force=True)
 
-        cancel = (i % 2) != 0
+        cancel = False # (i % 2) != 0
 
         task_done = False
         R = 0
@@ -435,6 +457,12 @@ def run_rollout(task_spec, policies, num_episodes, metapolicy_class, cancel=Fals
 
                 a = policies[option].get_action(env.all_info) #torch.from_numpy(obs).float())
                 # color = option_to_color[option]
+                if record:
+                    img = (cam.capture_rgb() * 255).astype(np.uint8)
+                    plt.imshow(img)
+                    camera.snap()
+                    # img = np.flip(img, 2) # reverse color properties
+                    # video.write(img)
                 obs, reward, done, info = env.step(a, policies[option].get_target_name())
                 # print(option, policies[option].get_target_name())
                 # print("FSA: {} | Goal: {} | reward {}".format(f, color, reward))
@@ -469,6 +497,11 @@ def run_rollout(task_spec, policies, num_episodes, metapolicy_class, cancel=Fals
         successes.append(success)      
         print(f"Episode {i} return: {R} | FSA: {f}")
 
+    if record:
+        animation = camera.animate()
+        animation.save('animation.mp4')
+
+        # video.release()
     env.shutdown()
 
     # env_can.close()
@@ -496,5 +529,30 @@ def run_all_tests():
             print("TEST {} {}".format(metapolicy_name, task_name))
             test_all_epochs(metapolicy, metapolicy_name, task, task_name)
 
+def record_test():
+    taskspec_if, _ = make_taskspec_if()
+    taskspec_or, _ = make_taskspec_or()
+    taskspec_sequential, _ = make_taskspec_sequential()
+    taskspec_composite, _ = make_taskspec_composite()
+
+    # metapolicies = [ContinuousMetaPolicy, GreedyContinuousMetaPolicy, FSAQLearningContinuousMetaPolicy, FlatQLearningContinuousMetaPolicy]
+    # metapolicy_names = ['lof', 'greedy', 'fsa', 'flat']
+    metapolicies = [ContinuousMetaPolicy]
+    metapolicy_names = ['lof']
+
+    epoch = 7500
+    option_load_path = os.path.join(os.environ['PKG_PATH'], 'experiments', 'ppo2', 'pyt_save', 'model{}.pt'.format(epoch))
+
+    pick_red_option = Option(option_load_path, pick_or_place='pick', target='red_target')
+    place_red_option = Option(option_load_path, pick_or_place='place', target='red_goal')
+    pick_green_option = Option(option_load_path, pick_or_place='pick', target='green_target')
+    pick_blue_option = Option(option_load_path, pick_or_place='pick', target='blue_target')
+    
+    options = [pick_red_option, place_red_option, pick_green_option,
+               pick_blue_option]
+
+    run_rollout(taskspec_composite, options, 1, ContinuousMetaPolicy, headless=False, record=True)
+
 if __name__ == '__main__':
-    run_all_tests()
+    # run_all_tests()
+    record_test()

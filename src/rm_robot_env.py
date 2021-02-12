@@ -251,7 +251,7 @@ class RMRobotEnv(gym.Env):
         return props
         
     def reset(self, cancel=False):
-        print("RESETINGGGGGGGGGGGGGGGGGGGGGGGGGG")
+        # print("RESETINGGGGGGGGGGGGGGGGGGGGGGGGGG")
         self.cancel = cancel
         # Get a random position within a cuboid and set the target position
         self.t_start = time.time()
@@ -291,11 +291,11 @@ class RMRobotEnv(gym.Env):
             print("Init FSA state: ", self.f)
         else:
             self.f = 0
-        print("TIP POSITION: ", self.agent.get_tip().get_position(), self.all_info['agent_joint_positions'])
+        # print("TIP POSITION: ", self.agent.get_tip().get_position(), self.all_info['agent_joint_positions'])
         obs = np.concatenate([np.array([self.f]), obs])
         return obs
 
-    def step(self, action, obj_name=None):
+    def step(self, action):
         done = False
         task_done = False
         info = {
