@@ -342,10 +342,10 @@ def save_dataset(exp_name, method_name, task_name, epoch, results):
     np.savez(path_name, results)
 
 def test_all_epochs(metapolicy_class, metapolicy_name, task, task_name):
-    # epochs = [i for i in range(250, 7251, 250)]
+    epochs = [i for i in range(1500, 7501, 250)]
     # epochs = [0, 2000, 4000, 6000, 7500]
-    epochs = [7500]
-    num_tests = 2
+    # epochs = [7500]
+    num_tests = 10
     # render_camera = False
     # env = RobotEnv(headless=True, render_camera=render_camera, option_rollout=True, episode_len=300)
 
@@ -554,5 +554,5 @@ def record_test():
     run_rollout(taskspec_composite, options, 1, ContinuousMetaPolicy, headless=False, record=True)
 
 if __name__ == '__main__':
-    # run_all_tests()
-    record_test()
+    run_all_tests()
+    # record_test()

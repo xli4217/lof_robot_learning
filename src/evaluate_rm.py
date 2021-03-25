@@ -20,7 +20,7 @@ def save_dataset(exp_name, method_name, task_name, epoch, results):
 def test_all_epochs(metapolicy_name, nF, task_name):
     epochs = [i for i in range(0, 1500, 250)]
     # epochs = [0]
-    num_tests = 2
+    num_tests = 10
     for epoch in epochs:
         results = test_epoch(epoch, nF, task_name, metapolicy_name, num_tests=num_tests)
         save_dataset('lunchbox', metapolicy_name, task_name, epoch, results)

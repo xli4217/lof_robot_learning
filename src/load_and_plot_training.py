@@ -31,7 +31,7 @@ rm_epochs = [i for i in range(0, 10001, 250)]
 rm_env_horizon = 1000
 rm_steps = np.array(rm_epochs) * rm_env_horizon
 
-num_exp = 2 # number of separate training runs
+num_exp = 1 # number of separate training runs
 
 def get_plot_data_for_task(task_num, task_name, num_exp=2):
     method_max_rewards = []
